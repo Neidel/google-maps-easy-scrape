@@ -294,5 +294,132 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
 });
 
+// XHR Response Handler
+chrome.webRequest.onCompleted.addListener(
+    async (details) => {
+        if (!BackgroundState.isWaitingForXhr || BackgroundState.hasProcessedXhr || !details.url) {
+            return;
+        }
+
+        if (details.url.includes('google.com/maps/preview/place') || 
+            details.url.includes('google.com/maps/place')) {
+            
+            console.log('Detected place data XHR:', details.url);
+            BackgroundState.hasProcessedXhr = true;
+            BackgroundState.isWaitingForXhr = false;
+
+            try {
+                const locationData = await findLocationData();
+                if (locationData) {
+                    console.log('Successfully parsed location data:', locationData);
+                    chrome.runtime.sendMessage({
+                        type: 'xhr_captured',
+                        data: locationData,
+                        currentState: getSerializableState()
+                    });
+                } else {
+                    console.log('No location data found, handling error');
+                    handleError();
+                }
+            } catch (error) {
+                console.error('Error processing location data:', error);
+                handleError();
+            }
+        }
+    },
+    { urls: ["*://*.google.com/*"] }
+);
+
+// Location data parsing
+async function findLocationData() {
+    try {
+        const tabs = await chrome.tabs.query({ active: true });
+        const tab = tabs.find(t => t.url?.includes('google.com/maps'));
+        
+        if (!tab?.id) {
+            console.error('No active Google Maps tab found');
+            return null;
+        }
+
+        const result = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: parseLocationData
+        });
+
+        if (result && result[0]?.result) {
+            return result[0].result;
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('Error in findLocationData:', error);
+        return null;
+    }
+}
+
+function parseLocationData() {
+    try {
+        // Find the main element containing place information
+        const mainElement = document.querySelector('div[role="main"]');
+        if (!mainElement) return null;
+
+        // Extract place name (without address)
+        const nameElement = mainElement.querySelector('h1');
+        const name = nameElement ? nameElement.textContent.trim() : '';
+
+        // Extract place ID from URL
+        const url = window.location.href;
+        const placeIdMatch = url.match(/place\/([^\/]+)/);
+        const placeId = placeIdMatch ? placeIdMatch[1] : '';
+
+        // Extract address components
+        const addressElement = mainElement.querySelector('button[data-item-id="address"]');
+        const fullAddress = addressElement ? addressElement.textContent.trim() : '';
+        
+        // Extract coordinates
+        const coords = { lat: null, lng: null };
+        const coordsMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+        if (coordsMatch) {
+            coords.lat = parseFloat(coordsMatch[1]);
+            coords.lng = parseFloat(coordsMatch[2]);
+        }
+
+        // Extract business type
+        const businessTypeElement = mainElement.querySelector('button[jsaction="pane.rating.category"]');
+        const businessType = businessTypeElement ? businessTypeElement.textContent.trim() : '';
+
+        // Extract phone number
+        const phoneElement = mainElement.querySelector('button[data-item-id="phone:tel"]');
+        const phone = phoneElement ? phoneElement.textContent.trim() : '';
+
+        // Extract website
+        const websiteElement = mainElement.querySelector('a[data-item-id="authority"]');
+        const website = websiteElement ? websiteElement.href : '';
+
+        // Extract rating information
+        const ratingElement = mainElement.querySelector('div[role="img"][aria-label*="stars"]');
+        const rating = ratingElement ? parseFloat(ratingElement.getAttribute('aria-label')) : null;
+        
+        const reviewsElement = mainElement.querySelector('button[jsaction="pane.rating.moreReviews"]');
+        const reviewCount = reviewsElement ? parseInt(reviewsElement.textContent.replace(/[^0-9]/g, '')) : 0;
+
+        return {
+            name,
+            placeId,
+            address: fullAddress,
+            coordinates: coords,
+            businessType,
+            phone,
+            website,
+            rating,
+            reviewCount,
+            url: window.location.href
+        };
+    } catch (error) {
+        console.error('Error parsing location data:', error);
+        return null;
+    }
+}
+
 // ... rest of existing code (parseLocationData, findLocationData, etc.) ...
   
