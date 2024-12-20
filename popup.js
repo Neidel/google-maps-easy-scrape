@@ -209,4 +209,222 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
+// Initialize UI
+document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize UI elements
+    resultsTable = document.getElementById('resultsTable');
+    collectButton = document.getElementById('collectButton');
+    processButton = document.getElementById('processButton');
+    clearButton = document.getElementById('clearButton');
+    downloadCsvButton = document.getElementById('downloadCsvButton');
+
+    // Initialize table headers
+    initializeTableHeaders();
+
+    // Enable collect button
+    collectButton.disabled = false;
+
+    // Add event listeners
+    collectButton.addEventListener('click', async () => {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (!tab?.url?.includes('google.com/maps')) {
+                alert('Please navigate to Google Maps first');
+                return;
+            }
+
+            collectButton.disabled = true;
+            const urls = await collectUrlsFromPage();
+            if (urls && urls.length > 0) {
+                AppState.collectedUrls = urls;
+                updateTable(urls);
+                processButton.disabled = false;
+                clearButton.disabled = false;
+            } else {
+                alert('No URLs found. Please scroll through the search results in Google Maps.');
+                collectButton.disabled = false;
+            }
+        } catch (error) {
+            console.error('Error collecting URLs:', error);
+            alert('Error collecting URLs. Please try again.');
+            collectButton.disabled = false;
+        }
+    });
+
+    processButton.addEventListener('click', () => {
+        processButton.disabled = true;
+        processNextUrl();
+    });
+
+    clearButton.addEventListener('click', () => {
+        resetState();
+        clearTable();
+        chrome.runtime.sendMessage({ type: 'clear_captured_data' });
+        processButton.disabled = true;
+        clearButton.disabled = true;
+        downloadCsvButton.disabled = true;
+        collectButton.disabled = false;
+    });
+
+    downloadCsvButton.addEventListener('click', () => {
+        downloadCsv();
+    });
+});
+
+// Function to collect URLs from the page
+async function collectUrlsFromPage() {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab?.id) return null;
+
+        const result = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => {
+                const links = Array.from(document.querySelectorAll('a[href*="maps/place"]'));
+                return links.map(link => link.href)
+                    .filter(url => url.includes('/maps/place/'))
+                    .filter((url, index, self) => self.indexOf(url) === index);
+            }
+        });
+
+        return result[0]?.result || [];
+    } catch (error) {
+        console.error('Error executing script:', error);
+        return null;
+    }
+}
+
+// Function to initialize table headers
+function initializeTableHeaders() {
+    const thead = resultsTable.querySelector('thead');
+    thead.innerHTML = `
+        <tr>
+            <th class="status-col">Status</th>
+            <th>Name</th>
+            <th>Address</th>
+            <th>Type</th>
+            <th>Phone</th>
+            <th>Rating</th>
+            <th>Reviews</th>
+            <th class="url-col">URL</th>
+        </tr>
+    `;
+}
+
+// Function to update table with URLs
+function updateTable(urls) {
+    const tbody = resultsTable.querySelector('tbody');
+    tbody.innerHTML = '';
+
+    urls.forEach(url => {
+        const row = document.createElement('tr');
+        row.dataset.url = url;
+        row.innerHTML = `
+            <td class="status-col">Pending</td>
+            <td colspan="7">
+                <a href="${url}" target="_blank" class="url-link">${url}</a>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// Function to update table row with data
+function updateTableRow(url, data) {
+    const row = resultsTable.querySelector(`tr[data-url="${url}"]`);
+    if (!row) return;
+
+    row.innerHTML = `
+        <td class="status-col">Completed</td>
+        <td>${data.name || ''}</td>
+        <td>${data.address || ''}</td>
+        <td>${data.businessType || ''}</td>
+        <td>${data.phone || ''}</td>
+        <td>${data.rating || ''}</td>
+        <td>${data.reviewCount || ''}</td>
+        <td class="url-col">
+            <a href="${url}" target="_blank" class="url-link">View</a>
+        </td>
+    `;
+}
+
+// Function to update row status
+function updateRowStatus(url, status, message = '') {
+    const row = resultsTable.querySelector(`tr[data-url="${url}"]`);
+    if (!row) return;
+
+    const statusCell = row.querySelector('.status-col');
+    if (!statusCell) return;
+
+    statusCell.textContent = message || status;
+    statusCell.className = `status-col ${status}`;
+}
+
+// Function to clear table
+function clearTable() {
+    const tbody = resultsTable.querySelector('tbody');
+    tbody.innerHTML = '';
+}
+
+// Function to download CSV
+function downloadCsv() {
+    const headers = ['Name', 'Address', 'Type', 'Phone', 'Rating', 'Reviews', 'URL'];
+    const rows = Array.from(AppState.processedData.values()).map(data => [
+        data.name || '',
+        data.address || '',
+        data.businessType || '',
+        data.phone || '',
+        data.rating || '',
+        data.reviewCount || '',
+        data.url || ''
+    ]);
+
+    const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'google_maps_data.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+// Function to handle stall detection
+function setStallTimeout(url) {
+    clearStallTimeout();
+    AppState.stallTimeout = setTimeout(() => {
+        if (AppState.isProcessing && AppState.currentUrl === url) {
+            console.log('Processing stalled, retrying...');
+            const retryCount = incrementRetryCount(url);
+            updateRowStatus(url, 'error', `Stalled (Attempt ${retryCount}/${AppState.MAX_RETRIES})`);
+            AppState.isProcessing = false;
+            AppState.currentUrl = null;
+            processNextUrl();
+        }
+    }, 15000);
+}
+
+function clearStallTimeout() {
+    if (AppState.stallTimeout) {
+        clearTimeout(AppState.stallTimeout);
+        AppState.stallTimeout = null;
+    }
+}
+
+// Helper function to extract place ID from URL
+function extractPlaceIdFromUrl(url) {
+    const match = url.match(/place\/([^\/]+)/);
+    return match ? match[1] : null;
+}
+
+// Helper function to validate place IDs
+function validatePlaceIds(urlPlaceId, dataPlaceId) {
+    if (!urlPlaceId || !dataPlaceId) return false;
+    return urlPlaceId === dataPlaceId;
+}
+
 // ... rest of existing code ...
