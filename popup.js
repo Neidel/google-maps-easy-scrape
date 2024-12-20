@@ -177,32 +177,25 @@ function handleXhrCaptured(message) {
                 // Update the specific row
                 updateTableRow(processedUrl, data);
                 updateRowStatus(processedUrl, 'completed');
+                
+                // Clear stall detection timeout
+                if (stallTimeout) {
+                    clearTimeout(stallTimeout);
+                }
             } else {
                 console.warn('Could not find URL for place ID:', data.placeId);
             }
 
-            // Get remaining unprocessed URLs
-            const remainingUrls = collectedUrls.filter(url => {
-                const urlPlaceId = urlToPlaceId.get(url);
-                return !processedData.has(urlPlaceId);
-            });
-
-            console.log('Remaining URLs:', remainingUrls.length, remainingUrls);
-
-            // Reset processing flag and process next URL after a delay
+            // Reset processing flags
             isProcessing = false;
-            if (remainingUrls.length > 0) {
-                console.log('Processing next URL in 2 seconds');
-                setTimeout(() => {
-                    if (!isProcessing) {
-                        processNextUrl();
-                    }
-                }, 2000);
-            } else {
-                console.log('No more URLs to process');
-                chrome.runtime.sendMessage({ type: 'processing_complete' });
-                if (processButton) processButton.disabled = false;
-            }
+            currentUrl = null;
+
+            // Process next URL after a delay
+            setTimeout(() => {
+                if (!isProcessing) {
+                    processNextUrl();
+                }
+            }, 2000);
         }
     } else {
         console.warn('Received XHR data without place ID');
@@ -222,13 +215,20 @@ function processNextUrl() {
     const unprocessedUrls = collectedUrls.filter(url => {
         const urlPlaceId = extractPlaceIdFromUrl(url);
         const mappedPlaceId = urlToPlaceId.get(url);
-        const isProcessed = mappedPlaceId && urlPlaceId === mappedPlaceId;
+        
+        // Check if URL has been processed
+        const isProcessed = Array.from(processedData.keys()).some(processedId => {
+            const processedData = urlToPlaceId.get(url);
+            return processedData && validatePlaceIds(urlPlaceId, processedData);
+        });
         
         console.log('URL processing check:', {
             url,
             urlPlaceId,
             mappedPlaceId,
-            isProcessed
+            isProcessed,
+            processedDataSize: processedData.size,
+            urlToPlaceIdSize: urlToPlaceId.size
         });
         
         return !isProcessed;
@@ -238,6 +238,11 @@ function processNextUrl() {
 
     if (unprocessedUrls.length > 0) {
         const nextUrl = unprocessedUrls[0];
+        if (nextUrl === currentUrl) {
+            console.log('Skipping already processing URL:', nextUrl);
+            return;
+        }
+        
         console.log('Processing next URL:', nextUrl);
         
         // Update UI to show processing state
@@ -253,6 +258,10 @@ function processNextUrl() {
         currentUrl = nextUrl;
         
         // Set up stall detection
+        if (stallTimeout) {
+            clearTimeout(stallTimeout);
+        }
+        
         stallTimeout = setTimeout(() => {
             console.log('Processing appears stalled, retrying...');
             updateRowStatus(nextUrl, 'error', 'Processing stalled, retrying...');
@@ -264,6 +273,8 @@ function processNextUrl() {
         console.log('All URLs processed');
         isProcessing = false;
         currentUrl = null;
+        chrome.runtime.sendMessage({ type: 'processing_complete' });
+        if (processButton) processButton.disabled = false;
     }
 }
 
