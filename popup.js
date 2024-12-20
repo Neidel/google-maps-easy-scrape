@@ -313,10 +313,8 @@ function initializeTableHeaders() {
             <th class="status-col">Status</th>
             <th>Name</th>
             <th>Address</th>
-            <th>Type</th>
             <th>Phone</th>
             <th>Rating</th>
-            <th>Reviews</th>
             <th class="url-col">URL</th>
         </tr>
     `;
@@ -349,10 +347,8 @@ function updateTableRow(url, data) {
         <td class="status-col">Completed</td>
         <td>${data.name || ''}</td>
         <td>${data.address || ''}</td>
-        <td>${data.businessType || ''}</td>
         <td>${data.phone || ''}</td>
         <td>${data.rating || ''}</td>
-        <td>${data.reviewCount || ''}</td>
         <td class="url-col">
             <a href="${url}" target="_blank" class="url-link">View</a>
         </td>
@@ -379,14 +375,12 @@ function clearTable() {
 
 // Function to download CSV
 function downloadCsv() {
-    const headers = ['Name', 'Address', 'Type', 'Phone', 'Rating', 'Reviews', 'URL'];
+    const headers = ['Name', 'Address', 'Phone', 'Rating', 'URL'];
     const rows = Array.from(AppState.processedData.values()).map(data => [
         data.name || '',
         data.address || '',
-        data.businessType || '',
         data.phone || '',
         data.rating || '',
-        data.reviewCount || '',
         data.url || ''
     ]);
 
