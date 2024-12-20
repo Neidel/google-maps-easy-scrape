@@ -106,21 +106,28 @@ async function updateTab(url) {
                     active: true 
                 });
                 
-                // Add delay to ensure page loads
+                // Initial delay to ensure navigation starts
                 await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                // Additional delay to ensure page content is fully loaded
+                await new Promise(resolve => setTimeout(resolve, 5000));
                 return true;
             } catch (error) {
                 console.error('Error updating existing tab:', error);
                 if (!error.message.includes('No tab with id')) {
                     const newTab = await chrome.tabs.create({ url: url, active: true });
+                    // Same delays for new tab
                     await new Promise(resolve => setTimeout(resolve, 3000));
+                    await new Promise(resolve => setTimeout(resolve, 5000));
                     return true;
                 }
                 return false;
             }
         } else {
             const newTab = await chrome.tabs.create({ url: url, active: true });
+            // Same delays for new tab creation
             await new Promise(resolve => setTimeout(resolve, 3000));
+            await new Promise(resolve => setTimeout(resolve, 5000));
             return true;
         }
     } catch (error) {
@@ -309,6 +316,9 @@ chrome.webRequest.onCompleted.addListener(
             BackgroundState.isWaitingForXhr = false;
 
             try {
+                // Add delay before attempting to parse the data
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
                 const locationData = await findLocationData();
                 if (locationData) {
                     console.log('Successfully parsed location data:', locationData);
@@ -372,10 +382,22 @@ function parseLocationData() {
         const placeIdMatch = url.match(/place\/([^\/]+)/);
         const placeId = placeIdMatch ? placeIdMatch[1] : '';
 
-        // Extract address components and clean up the map pin emoji
+        // Extract address components and clean up all special characters
         const addressElement = mainElement.querySelector('button[data-item-id="address"]');
-        const fullAddress = addressElement ? 
-            addressElement.textContent.trim().replace(/^📍\s*/, '') : '';
+        let fullAddress = '';
+        if (addressElement) {
+            fullAddress = addressElement.textContent
+                .trim()
+                // Remove map pin emoji and other special characters at start
+                .replace(/^[^\w\d]*/, '')
+                // Remove any non-printable characters
+                .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+                // Remove any remaining emojis
+                .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
+                // Clean up any double spaces
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
         
         // Extract coordinates
         const coords = { lat: null, lng: null };
