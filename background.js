@@ -311,6 +311,11 @@ function validatePlaceIds(id1, id2) {
 // Update the parseLocationData function
 async function parseLocationData(tab) {
     try {
+        if (!tab || !tab.id) {
+            throw new Error('Invalid tab provided to parseLocationData');
+        }
+
+        console.log('Executing script in tab:', tab.id);
         const result = await chrome.scripting.executeScript({
             target: { tabId: tab.id },
             function: () => {
@@ -377,13 +382,14 @@ async function parseLocationData(tab) {
         });
         
         if (!result || !result[0] || !result[0].result) {
-            throw new Error('Failed to parse location data');
+            throw new Error('Failed to parse location data - no result returned');
         }
         
         return result[0].result;
     } catch (error) {
         console.error('Error parsing location data:', error);
-        throw error;
+        // Return null instead of throwing to handle the error more gracefully
+        return null;
     }
 }
 
@@ -579,6 +585,13 @@ async function processRequest(details) {
     console.log('Processing with request ID:', requestId);
     
     try {
+        // Get the current active tab
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tabs || !tabs[0] || !tabs[0].id) {
+            throw new Error('No active tab found');
+        }
+        const tab = tabs[0];
+
         const response = await fetch(details.url);
         const text = await response.text();
         
@@ -608,7 +621,8 @@ async function processRequest(details) {
             throw new Error('Could not find location data in response');
         }
         
-        const parsedLocation = parseLocationData(locationData);
+        // Pass the tab to parseLocationData
+        const parsedLocation = await parseLocationData(tab);
         
         if (parsedLocation) {
             console.log('Successfully parsed location:', parsedLocation.name);
