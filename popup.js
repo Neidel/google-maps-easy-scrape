@@ -313,12 +313,12 @@ function initializeTableHeaders() {
         <tr>
             <th class="status-col">Status</th>
             <th class="name-col">Name</th>
+            <th class="rating-col">Rating</th>
             <th class="address-col">Address</th>
             <th class="website-col">Website</th>
             <th class="phone-col">Phone</th>
-            <th class="details-col">Details</th>
-            <th class="rating-col">Rating</th>
             <th class="url-col">URL</th>
+            <th class="details-col">Details</th>
         </tr>
     `;
 }
@@ -349,16 +349,16 @@ function updateTableRow(url, data) {
     row.innerHTML = `
         <td class="status-col">Completed</td>
         <td class="name-col">${data.name || ''}</td>
+        <td class="rating-col">${data.rating || ''}</td>
         <td class="address-col">${data.address || ''}</td>
         <td class="website-col">
             ${data.website ? `<a href="${data.website}" target="_blank" class="url-link">${data.website}</a>` : ''}
         </td>
         <td class="phone-col">${data.phone || ''}</td>
-        <td class="details-col">${data.details || ''}</td>
-        <td class="rating-col">${data.rating || ''}</td>
         <td class="url-col">
             <a href="${url}" target="_blank" class="url-link">[View]</a>
         </td>
+        <td class="details-col">${data.details || ''}</td>
     `;
 }
 
@@ -382,15 +382,15 @@ function clearTable() {
 
 // Function to download CSV
 function downloadCsv() {
-    const headers = ['Name', 'Address', 'Website', 'Phone', 'Details', 'Rating', 'URL'];
+    const headers = ['Name', 'Rating', 'Address', 'Website', 'Phone', 'URL', 'Details'];
     const rows = Array.from(AppState.processedData.values()).map(data => [
         data.name || '',
+        data.rating || '',
         data.address || '',
         data.website || '',
         data.phone || '',
-        data.details || '',
-        data.rating || '',
-        data.url || ''
+        data.url || '',
+        data.details || ''
     ]);
 
     const csvContent = [
