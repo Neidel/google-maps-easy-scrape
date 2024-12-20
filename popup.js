@@ -264,10 +264,6 @@ function processNextUrl() {
                 isProcessing,
                 currentUrl
             }
-        }, () => {
-            chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-                chrome.tabs.update(tabs[0].id, { url: nextUrl });
-            });
         });
     } else {
         console.log('All URLs processed');
@@ -746,12 +742,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         updateRowStatus(message.url, 'error', message.error || 'Authentication failed');
         isProcessing = false;
         
-        // Add delay before processing next URL
+        // Add longer delay before processing next URL
         setTimeout(() => {
             if (!isProcessing) {
                 processNextUrl();
             }
-        }, 2000);
+        }, 5000);
     }
 });
 

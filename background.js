@@ -78,37 +78,9 @@ chrome.webRequest.onCompleted.addListener(
             return;
         }
 
-        // Handle auth redirect with improved retry logic
+        // Handle auth redirect
         if (details.url.includes('accounts.google.com')) {
-            if (!isRetrying && currentUrl && retryCount < MAX_RETRIES && !isProcessingLocked) {
-                console.log(`Auth redirect detected, retry attempt ${retryCount + 1} of ${MAX_RETRIES}`);
-                isRetrying = true;
-                
-                // Add exponential backoff for auth retries
-                const retryDelay = Math.min(2000 * Math.pow(2, retryCount), 10000);
-                
-                setTimeout(() => {
-                    if (currentUrl === lastProcessedUrl && !isComplete) {
-                        const newRequestId = generateRequestId();
-                        console.log('Generated new request ID:', newRequestId);
-                        currentRequestId = newRequestId;
-                        
-                        // Reset processing flags
-                        isProcessingLocked = false;
-                        hasProcessedXhr = false;
-                        isWaitingForXhr = true;
-                        
-                        chrome.tabs.update({ url: currentUrl }).catch(error => {
-                            console.error('Error updating tab:', error);
-                            moveToNextUrl();
-                        });
-                    }
-                    isRetrying = false;
-                }, retryDelay);
-            } else if (retryCount >= MAX_RETRIES) {
-                console.log('Max retries reached, moving to next URL');
-                moveToNextUrl();
-            }
+            handleAuthRedirect(details);
             return;
         }
 
@@ -117,7 +89,8 @@ chrome.webRequest.onCompleted.addListener(
         isRetrying = false;
 
         // Continue with normal processing...
-        if (!isComplete && isWaitingForXhr && !hasProcessedXhr && currentUrl === lastProcessedUrl && !isProcessingLocked &&
+        if (!isComplete && isWaitingForXhr && !hasProcessedXhr && 
+            currentUrl === lastProcessedUrl && !isProcessingLocked &&
             (details.url.includes('passiveassist') || details.url.includes('preview/place'))) {
             processRequest(details);
         }
@@ -562,38 +535,69 @@ function moveToNextUrl() {
 }
 
 // Update error handling for tab updates
-async function updateTab(tabId, options) {
+async function updateTab(url) {
     try {
-        await chrome.tabs.update(tabId, options);
-    } catch (error) {
-        // Ignore DevTools errors as they don't affect functionality
-        if (!error.message.includes('DevTools')) {
-            console.error('Error updating tab:', error);
+        // Get all tabs and find one that's on Google Maps
+        const tabs = await chrome.tabs.query({});
+        let targetTab = tabs.find(tab => tab.url.includes('google.com/maps'));
+        
+        if (targetTab) {
+            // Try to update existing tab
+            try {
+                await chrome.tabs.update(targetTab.id, { url });
+                return true;
+            } catch (error) {
+                // If DevTools error, try to create new tab
+                if (error.message.includes('DevTools')) {
+                    const newTab = await chrome.tabs.create({ url });
+                    return true;
+                }
+                throw error;
+            }
+        } else {
+            // If no Maps tab found, create new one
+            const newTab = await chrome.tabs.create({ url });
+            return true;
         }
+    } catch (error) {
+        console.error('Error in updateTab:', error);
+        return false;
     }
 }
 
 // Update the retry mechanism
-async function handleAuthRedirect(url, retryCount = 0) {
-    const maxRetries = 3;
-    
-    if (retryCount >= maxRetries) {
-        console.log('Max retries reached for URL:', url);
-        sendMessageToPopup({ type: 'auth_failed', url });
-        return;
-    }
-
-    console.log(`Auth redirect detected, retry attempt ${retryCount + 1} of ${maxRetries}`);
-    
-    try {
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait between retries
-        const result = await processRequest(url);
-        if (!result) {
-            await handleAuthRedirect(url, retryCount + 1);
-        }
-    } catch (error) {
-        console.error('Error during auth retry:', error);
-        await handleAuthRedirect(url, retryCount + 1);
+async function handleAuthRedirect(details) {
+    if (!isRetrying && currentUrl && retryCount < MAX_RETRIES && !isProcessingLocked) {
+        console.log(`Auth redirect detected, retry attempt ${retryCount + 1} of ${MAX_RETRIES}`);
+        isRetrying = true;
+        
+        // Add exponential backoff for auth retries
+        const retryDelay = Math.min(2000 * Math.pow(2, retryCount), 10000);
+        
+        setTimeout(async () => {
+            if (currentUrl === lastProcessedUrl && !isComplete) {
+                const newRequestId = generateRequestId();
+                console.log('Generated new request ID:', newRequestId);
+                currentRequestId = newRequestId;
+                
+                // Reset processing flags
+                isProcessingLocked = false;
+                hasProcessedXhr = false;
+                isWaitingForXhr = true;
+                
+                const success = await updateTab(currentUrl);
+                if (!success) {
+                    console.log('Failed to update tab, moving to next URL');
+                    moveToNextUrl();
+                }
+            }
+            isRetrying = false;
+        }, retryDelay);
+        
+        retryCount++;
+    } else if (retryCount >= MAX_RETRIES) {
+        console.log('Max retries reached, moving to next URL');
+        moveToNextUrl();
     }
 }
 
