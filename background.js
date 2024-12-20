@@ -481,6 +481,18 @@ function parseLocationData() {
         const reviewsElement = mainElement.querySelector('button[jsaction="pane.rating.moreReviews"]');
         const reviewCount = reviewsElement ? parseInt(reviewsElement.textContent.replace(/[^0-9]/g, '')) : 0;
 
+        // Extract amenity details
+        const details = [];
+        const amenityElements = mainElement.querySelectorAll('.WKLD0c .CK16pd');
+        amenityElements.forEach(element => {
+            const ariaLabel = element.getAttribute('aria-label');
+            if (ariaLabel) {
+                // Extract the amenity name without the "available" or "unavailable" suffix
+                const amenityName = ariaLabel.replace(/ (available|unavailable)$/, '').trim();
+                details.push(amenityName);
+            }
+        });
+
         return {
             name,
             placeId,
@@ -491,6 +503,7 @@ function parseLocationData() {
             website,
             rating,
             reviewCount,
+            details: details.join(', '),
             url: window.location.href
         };
     } catch (error) {
