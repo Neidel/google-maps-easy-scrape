@@ -367,174 +367,104 @@ async function findLocationData() {
     }
 }
 
-function parseLocationData(html, url, xhr) {
+function parseLocationData() {
     try {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        
-        // Extract coordinates from XHR data
-        let lat = null;
-        let lon = null;
-        if (xhr) {
-            try {
-                const xhrData = JSON.parse(xhr);
-                // Look for coordinate array in the XHR data
-                const findCoords = (obj) => {
-                    if (Array.isArray(obj)) {
-                        for (let item of obj) {
-                            if (Array.isArray(item) && item.length === 4 && 
-                                item[0] === null && item[1] === null && 
-                                typeof item[2] === 'number' && typeof item[3] === 'number') {
-                                return [item[2], item[3]];
-                            }
-                            const result = findCoords(item);
-                            if (result) return result;
-                        }
-                    } else if (typeof obj === 'object' && obj !== null) {
-                        for (let key in obj) {
-                            const result = findCoords(obj[key]);
-                            if (result) return result;
-                        }
-                    }
-                    return null;
-                };
-                const coords = findCoords(xhrData);
-                if (coords) {
-                    [lat, lon] = coords;
-                }
-            } catch (e) {
-                console.error('Error parsing XHR data:', e);
-            }
-        }
-
         // Find the main element containing place information
         const mainElement = document.querySelector('div[role="main"]');
-        if (!mainElement) return null;
+        if (!mainElement) {
+            console.error('Main element not found');
+            return null;
+        }
 
         // Extract place name (without address)
         const nameElement = mainElement.querySelector('h1');
         const name = nameElement ? nameElement.textContent.trim() : '';
 
         // Extract place ID from URL
-        const placeIdMatch = url.match(/place\/([^\/]+)/);
+        const placeIdMatch = window.location.href.match(/place\/([^\/]+)/);
         const placeId = placeIdMatch ? placeIdMatch[1] : '';
 
         // Extract address components and clean up all special characters
-        const addressElement = mainElement.querySelector('button[data-item-id="address"]');
+        const addressElement = mainElement.querySelector('button[data-item-id^="address"]');
         let fullAddress = '';
         if (addressElement) {
             fullAddress = addressElement.textContent
                 .trim()
-                // Remove map pin emoji and other special characters at start
                 .replace(/^[^\w\d]*/, '')
-                // Remove any non-printable characters
                 .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
-                // Remove any remaining emojis
                 .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
-                // Clean up any double spaces
                 .replace(/\s+/g, ' ')
                 .trim();
         }
         
         // Extract business type
-        const businessTypeElement = mainElement.querySelector('button[jsaction="pane.rating.category"]');
+        const businessTypeElement = mainElement.querySelector('button[jsaction*="pane.rating.category"]');
         const businessType = businessTypeElement ? businessTypeElement.textContent.trim() : '';
 
         // Enhanced phone number extraction
         let phone = '';
-        // First try the tel: data-item-id pattern
-        const phoneElement = mainElement.querySelector('button[data-item-id^="phone:tel:"]');
+        const phoneElement = mainElement.querySelector('button[data-item-id^="phone:tel"]');
         if (phoneElement) {
             phone = phoneElement.textContent
                 .trim()
-                // Remove any leading non-alphanumeric characters (including icons)
                 .replace(/^[^\w\d+]*/, '')
-                // Remove any non-printable characters
                 .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
-                // Remove any remaining emojis and special unicode characters
                 .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
-                // Clean up any double spaces
                 .replace(/\s+/g, ' ')
                 .trim();
-        } else {
-            // Fallback to the old selector if the first method fails
-            const fallbackPhoneElement = mainElement.querySelector('button[data-item-id="phone:tel"]');
-            phone = fallbackPhoneElement ? fallbackPhoneElement.textContent
-                .trim()
-                .replace(/^[^\w\d+]*/, '')
-                .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
-                .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
-                .replace(/\s+/g, ' ')
-                .trim() : '';
         }
 
         // Enhanced website extraction
         let website = '';
-        const websiteElement = mainElement.querySelector('a[data-item-id="authority"]');
+        const websiteElement = mainElement.querySelector('a[data-item-id="authority"], button[data-item-id="authority"]');
         if (websiteElement) {
-            // Get the display text and href
-            const displayUrl = websiteElement.textContent
-                .trim()
-                .replace(/^[^\w\d]*/, '')
-                .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
-                .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-            
-            // Get the actual href
-            const href = websiteElement.href;
-            
-            // Prefer the href if it's a valid URL, otherwise use the display text
+            const href = websiteElement.href || websiteElement.getAttribute('data-url') || websiteElement.textContent.trim();
             try {
-                new URL(href);
-                website = href;
+                website = href.startsWith('http') ? href : `http://${href}`;
+                new URL(website); // Validate the URL
             } catch {
-                try {
-                    // Try to construct a URL from the display text
-                    if (!displayUrl.startsWith('http')) {
-                        website = 'http://' + displayUrl;
-                    } else {
-                        website = displayUrl;
-                    }
-                    new URL(website); // Validate the URL
-                } catch {
-                    website = ''; // Reset if invalid
-                }
+                website = '';
             }
         }
 
         // Extract rating information
-        const ratingElement = mainElement.querySelector('div[role="img"][aria-label*="stars"]');
+        const ratingElement = mainElement.querySelector('div[role="img"][aria-label*="stars"], span[aria-label*="stars"]');
         const rating = ratingElement ? parseFloat(ratingElement.getAttribute('aria-label')) : null;
-        
-        const reviewsElement = mainElement.querySelector('button[jsaction="pane.rating.moreReviews"]');
-        const reviewCount = reviewsElement ? parseInt(reviewsElement.textContent.replace(/[^0-9]/g, '')) : 0;
+
+        // Extract coordinates from URL
+        const coordsMatch = window.location.href.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+        const lat = coordsMatch ? parseFloat(coordsMatch[1]) : null;
+        const lon = coordsMatch ? parseFloat(coordsMatch[2]) : null;
 
         // Extract amenity details
         const details = [];
-        const amenityElements = mainElement.querySelectorAll('.WKLD0c .CK16pd');
+        const amenityElements = mainElement.querySelectorAll('.WKLD0c .CK16pd, div[aria-label*="Amenities"]');
         amenityElements.forEach(element => {
             const ariaLabel = element.getAttribute('aria-label');
             if (ariaLabel) {
-                // Extract the amenity name without the "available" or "unavailable" suffix
                 const amenityName = ariaLabel.replace(/ (available|unavailable)$/, '').trim();
                 details.push(amenityName);
+            } else {
+                const text = element.textContent.trim();
+                if (text) details.push(text);
             }
         });
 
-        return {
+        const result = {
             name,
             placeId,
             address: fullAddress,
-            coordinates: coords,
-            businessType,
             phone,
             website,
             rating,
-            reviewCount,
+            lat,
+            lon,
             details: details.join(', '),
             url: window.location.href
         };
+
+        console.log('Parsed location data:', result);
+        return result;
     } catch (error) {
         console.error('Error parsing location data:', error);
         return null;
