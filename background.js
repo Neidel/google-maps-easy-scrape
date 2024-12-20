@@ -411,9 +411,17 @@ function parseLocationData() {
         const businessTypeElement = mainElement.querySelector('button[jsaction="pane.rating.category"]');
         const businessType = businessTypeElement ? businessTypeElement.textContent.trim() : '';
 
-        // Extract phone number
-        const phoneElement = mainElement.querySelector('button[data-item-id="phone:tel"]');
-        const phone = phoneElement ? phoneElement.textContent.trim() : '';
+        // Enhanced phone number extraction
+        let phone = '';
+        // First try the tel: data-item-id pattern
+        const phoneElement = mainElement.querySelector('button[data-item-id^="phone:tel:"]');
+        if (phoneElement) {
+            phone = phoneElement.textContent.trim();
+        } else {
+            // Fallback to the old selector if the first method fails
+            const fallbackPhoneElement = mainElement.querySelector('button[data-item-id="phone:tel"]');
+            phone = fallbackPhoneElement ? fallbackPhoneElement.textContent.trim() : '';
+        }
 
         // Extract website
         const websiteElement = mainElement.querySelector('a[data-item-id="authority"]');
