@@ -151,16 +151,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
                 console.log('Starting to process URL:', currentUrl);
                 
+                // Initialize tab and load URL
+                (async () => {
+                    try {
+                        const success = await updateTab(currentUrl);
+                        if (!success) {
+                            console.log('Failed to update tab, retrying...');
+                            // Add delay before retry
+                            setTimeout(async () => {
+                                const retrySuccess = await updateTab(currentUrl);
+                                if (!retrySuccess) {
+                                    console.log('Failed to update tab after retry, moving to next URL');
+                                    moveToNextUrl();
+                                }
+                            }, 2000);
+                        }
+                    } catch (error) {
+                        console.error('Error initializing tab:', error);
+                        moveToNextUrl();
+                    }
+                })();
+
                 // Set a timeout to retry if no XHR is detected
                 setTimeout(() => {
                     if (isWaitingForXhr && currentUrl === lastProcessedUrl && !isProcessingLocked && !isComplete) {
                         console.log('No XHR detected, retrying URL:', currentUrl);
-                        const newRequestId = generateRequestId();
-                        console.log('Generated new request ID:', newRequestId);
-                        currentRequestId = newRequestId;
-                        chrome.tabs.update({ url: currentUrl });
+                        handleError();
                     }
-                }, 5000);
+                }, 10000); // Increased timeout to 10 seconds
             } else {
                 console.log('Skipping URL processing - already processing, locked, or complete');
             }
@@ -537,26 +555,43 @@ function moveToNextUrl() {
 // Update error handling for tab updates
 async function updateTab(url) {
     try {
-        // Get all tabs and find one that's on Google Maps
+        // Get all tabs
         const tabs = await chrome.tabs.query({});
-        let targetTab = tabs.find(tab => tab.url.includes('google.com/maps'));
+        
+        // First try to find an active Google Maps tab
+        let targetTab = tabs.find(tab => 
+            tab.url?.includes('google.com/maps') && 
+            tab.active && 
+            !tab.url?.includes('DevTools')
+        );
+        
+        // If no active Maps tab, look for any Maps tab
+        if (!targetTab) {
+            targetTab = tabs.find(tab => 
+                tab.url?.includes('google.com/maps') && 
+                !tab.url?.includes('DevTools')
+            );
+        }
         
         if (targetTab) {
-            // Try to update existing tab
             try {
-                await chrome.tabs.update(targetTab.id, { url });
+                await chrome.tabs.update(targetTab.id, { 
+                    url: url,
+                    active: true 
+                });
                 return true;
             } catch (error) {
-                // If DevTools error, try to create new tab
-                if (error.message.includes('DevTools')) {
-                    const newTab = await chrome.tabs.create({ url });
+                console.error('Error updating existing tab:', error);
+                // If update fails, try to create new tab
+                if (!error.message.includes('No tab with id')) {
+                    const newTab = await chrome.tabs.create({ url: url, active: true });
                     return true;
                 }
-                throw error;
+                return false;
             }
         } else {
-            // If no Maps tab found, create new one
-            const newTab = await chrome.tabs.create({ url });
+            // Create new tab if no suitable tab found
+            const newTab = await chrome.tabs.create({ url: url, active: true });
             return true;
         }
     } catch (error) {
