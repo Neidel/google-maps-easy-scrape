@@ -115,7 +115,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     try {
         if (message.type === 'get_state') {
             console.log('Sending state to popup:', appState);
-            // Convert Maps to arrays for serialization
             const serializedState = {
                 collectedUrls: appState.collectedUrls,
                 processedData: Array.from(appState.processedData.entries()),
@@ -129,8 +128,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             appState.collectedUrls = message.urls;
             sendResponse({ success: true });
         } else if (message.type === 'process_url') {
-            // Only process if we're not locked or waiting and not complete
-            if (!isProcessingLocked && !isWaitingForXhr && !isComplete) {
+            console.log('Processing URL request:', message.url);
+            
+            // Force reset state if we're locked
+            if (isProcessingLocked) {
+                console.log('Found locked state, forcing reset');
+                resetState();
+            }
+            
+            if (!isWaitingForXhr && !isComplete) {
                 resetState();
                 currentUrl = message.url;
                 lastProcessedUrl = message.url;
@@ -159,11 +165,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         const success = await updateTab(currentUrl);
                         if (!success) {
                             console.log('Failed to update tab, retrying...');
-                            // Add delay before retry
                             setTimeout(async () => {
                                 const retrySuccess = await updateTab(currentUrl);
                                 if (!retrySuccess) {
-                                    console.log('Failed to update tab after retry, moving to next URL');
+                                    console.log('Failed to update tab after retry');
                                     moveToNextUrl();
                                 }
                             }, 2000);
@@ -174,30 +179,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     }
                 })();
 
-                // Set a timeout to retry if no XHR is detected
+                // Set a timeout to check for XHR
                 setTimeout(() => {
-                    if (isWaitingForXhr && currentUrl === lastProcessedUrl && !isProcessingLocked && !isComplete) {
+                    if (isWaitingForXhr && currentUrl === lastProcessedUrl && !isComplete) {
                         console.log('No XHR detected, retrying URL:', currentUrl);
                         handleError();
                     }
-                }, 10000); // Increased timeout to 10 seconds
+                }, 10000);
             } else {
-                console.log('Skipping URL processing - already processing, locked, or complete');
-                // If we're locked but should be processing, try to recover
-                if (isProcessingLocked && currentUrl) {
-                    console.log('Detected locked state, attempting to recover');
+                console.log('Cannot process URL - waiting for XHR or complete');
+                // If we're stuck, try to recover
+                if (isProcessingLocked || isWaitingForXhr) {
+                    console.log('Detected stuck state, attempting to recover');
                     setTimeout(() => {
                         resetState();
-                        chrome.runtime.sendMessage({ type: 'retry_processing' });
-                    }, 5000);
+                        chrome.runtime.sendMessage({ 
+                            type: 'retry_processing',
+                            url: message.url
+                        });
+                    }, 2000);
                 }
             }
             
             sendResponse({ success: true });
         } else if (message.type === 'clear_captured_data') {
+            resetState();
             currentUrl = null;
             lastProcessedUrl = null;
-            isProcessingLocked = false;
             isComplete = false;
             currentRequestId = null;
             appState = {
@@ -206,17 +214,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 urlToPlaceId: new Map(),
                 isProcessing: false
             };
-            resetState();
             sendResponse({ success: true });
         } else if (message.type === 'processing_complete') {
             console.log('Processing complete signal received');
             isComplete = true;
-            isProcessingLocked = false;
+            resetState();
             currentUrl = null;
             lastProcessedUrl = null;
             currentRequestId = null;
             appState.isProcessing = false;
-            resetState();
             sendResponse({ success: true });
         }
     } catch (err) {

@@ -270,7 +270,13 @@ function processNextUrl() {
                 if (isProcessing && currentUrl === nextUrl) {
                     console.log('Processing appears stalled, retrying...');
                     isProcessing = false;
-                    processNextUrl();
+                    currentUrl = null;
+                    updateRowStatus(nextUrl, 'error', 'Processing stalled, retrying...');
+                    setTimeout(() => {
+                        if (!isProcessing) {
+                            processNextUrl();
+                        }
+                    }, 2000);
                 }
             }, 15000);
         });
@@ -750,6 +756,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.log('Auth failed for URL:', message.url);
         updateRowStatus(message.url, 'error', message.error || 'Authentication failed');
         isProcessing = false;
+        currentUrl = null;
         
         // Add longer delay before processing next URL
         setTimeout(() => {
@@ -758,8 +765,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
         }, 5000);
     } else if (message.type === 'retry_processing') {
-        console.log('Received retry processing signal');
+        console.log('Received retry processing signal for URL:', message.url);
         isProcessing = false;
+        currentUrl = null;
+        
+        // If a specific URL was provided, update its status
+        if (message.url) {
+            updateRowStatus(message.url, 'error', 'Retrying...');
+        }
+        
         setTimeout(() => {
             if (!isProcessing) {
                 processNextUrl();
