@@ -312,10 +312,10 @@ function initializeTableHeaders() {
     thead.innerHTML = `
         <tr>
             <th class="status-col">Status</th>
-            <th>Name</th>
-            <th>Address</th>
-            <th>Phone</th>
-            <th>Rating</th>
+            <th class="name-col">Name</th>
+            <th class="address-col">Address</th>
+            <th class="phone-col">Phone</th>
+            <th class="rating-col">Rating</th>
             <th class="url-col">URL</th>
         </tr>
     `;
@@ -331,7 +331,7 @@ function updateTable(urls) {
         row.dataset.url = url;
         row.innerHTML = `
             <td class="status-col">Pending</td>
-            <td colspan="7">
+            <td colspan="5" class="url-cell">
                 <a href="${url}" target="_blank" class="url-link">${url}</a>
             </td>
         `;
@@ -346,10 +346,10 @@ function updateTableRow(url, data) {
 
     row.innerHTML = `
         <td class="status-col">Completed</td>
-        <td>${data.name || ''}</td>
-        <td>${data.address || ''}</td>
-        <td>${data.phone || ''}</td>
-        <td>${data.rating || ''}</td>
+        <td class="name-col">${data.name || ''}</td>
+        <td class="address-col">${data.address || ''}</td>
+        <td class="phone-col">${data.phone || ''}</td>
+        <td class="rating-col">${data.rating || ''}</td>
         <td class="url-col">
             <a href="${url}" target="_blank" class="url-link">View</a>
         </td>

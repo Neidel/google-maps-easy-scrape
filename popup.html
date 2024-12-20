@@ -52,20 +52,22 @@
       font-family: 'Poppins', sans-serif;
     }
     table {
-      width: auto;
+      width: 100%;
       border-collapse: collapse;
-      margin-top: 20px;
       font-size: 11px;
+      margin: 0;
+      table-layout: auto;
     }
     th, td {
-      padding: 1px 6px;
-      text-align: center;
+      padding: 6px 10px;
+      text-align: left;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       border: none;
       border-bottom: 1px solid #f5f5f5;
       line-height: 1.2;
+      min-width: 50px;
     }
     th {
       background-color: #fafafa;
@@ -80,10 +82,25 @@
     tr:last-child td {
       border-bottom: none;
     }
-    .status-col, .url-col {
-      min-width: unset;
-      max-width: unset;
-      width: auto !important;
+    .status-col {
+      width: 80px;
+      min-width: 80px;
+    }
+    .url-col {
+      width: 60px;
+      min-width: 60px;
+    }
+    .name-col {
+      min-width: 150px;
+    }
+    .address-col {
+      min-width: 200px;
+    }
+    .phone-col {
+      min-width: 100px;
+    }
+    .rating-col {
+      min-width: 70px;
     }
     .spinner {
       display: inline-block;
@@ -195,12 +212,6 @@
       display: flex;
       gap: 10px;
       align-items: center;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 11px;
-      margin: 0;
     }
     thead {
       position: sticky;
