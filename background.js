@@ -416,11 +416,27 @@ function parseLocationData() {
         // First try the tel: data-item-id pattern
         const phoneElement = mainElement.querySelector('button[data-item-id^="phone:tel:"]');
         if (phoneElement) {
-            phone = phoneElement.textContent.trim();
+            phone = phoneElement.textContent
+                .trim()
+                // Remove any leading non-alphanumeric characters (including icons)
+                .replace(/^[^\w\d+]*/, '')
+                // Remove any non-printable characters
+                .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+                // Remove any remaining emojis and special unicode characters
+                .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
+                // Clean up any double spaces
+                .replace(/\s+/g, ' ')
+                .trim();
         } else {
             // Fallback to the old selector if the first method fails
             const fallbackPhoneElement = mainElement.querySelector('button[data-item-id="phone:tel"]');
-            phone = fallbackPhoneElement ? fallbackPhoneElement.textContent.trim() : '';
+            phone = fallbackPhoneElement ? fallbackPhoneElement.textContent
+                .trim()
+                .replace(/^[^\w\d+]*/, '')
+                .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+                .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
+                .replace(/\s+/g, ' ')
+                .trim() : '';
         }
 
         // Extract website
