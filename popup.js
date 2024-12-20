@@ -5,6 +5,7 @@ let processedData = new Map();
 let urlToPlaceId = new Map();
 let isProcessing = false;
 let currentUrl = null;
+let stallTimeout = null;
 let collectButton, processButton, clearButton, downloadCsvButton;
 
 // Helper functions defined at global scope
@@ -131,6 +132,24 @@ function updateTableRow(url, data) {
     }
 }
 
+function clearStallTimeout() {
+    if (stallTimeout) {
+        clearTimeout(stallTimeout);
+        stallTimeout = null;
+    }
+}
+
+function setStallTimeout(url) {
+    clearStallTimeout();
+    stallTimeout = setTimeout(() => {
+        console.log('Processing appears stalled, retrying...');
+        updateRowStatus(url, 'error', 'Processing stalled, retrying...');
+        isProcessing = false;
+        currentUrl = null;
+        processNextUrl();
+    }, 15000); // 15 second timeout
+}
+
 function handleXhrCaptured(message) {
     const data = message.data;
     console.log('Received XHR data:', data);
@@ -179,9 +198,7 @@ function handleXhrCaptured(message) {
                 updateRowStatus(processedUrl, 'completed');
                 
                 // Clear stall detection timeout
-                if (stallTimeout) {
-                    clearTimeout(stallTimeout);
-                }
+                clearStallTimeout();
             } else {
                 console.warn('Could not find URL for place ID:', data.placeId);
             }
@@ -210,6 +227,9 @@ function processNextUrl() {
         console.log('Already processing a URL, skipping');
         return;
     }
+
+    // Clear any existing stall timeout
+    clearStallTimeout();
 
     // Check all URLs against processed data
     const unprocessedUrls = collectedUrls.filter(url => {
@@ -258,17 +278,7 @@ function processNextUrl() {
         currentUrl = nextUrl;
         
         // Set up stall detection
-        if (stallTimeout) {
-            clearTimeout(stallTimeout);
-        }
-        
-        stallTimeout = setTimeout(() => {
-            console.log('Processing appears stalled, retrying...');
-            updateRowStatus(nextUrl, 'error', 'Processing stalled, retrying...');
-            isProcessing = false;
-            currentUrl = null;
-            processNextUrl();
-        }, 15000); // 15 second timeout
+        setStallTimeout(nextUrl);
     } else {
         console.log('All URLs processed');
         isProcessing = false;
@@ -373,6 +383,7 @@ document.addEventListener('DOMContentLoaded', function() {
             processedData.clear();
             urlToPlaceId.clear();
             currentUrl = null;
+            clearStallTimeout();
             updateTable([]);
             processButton.disabled = true;
             downloadCsvButton.disabled = true;
