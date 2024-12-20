@@ -350,7 +350,7 @@ function updateTableRow(url, data) {
         <td class="name-col">${data.name || ''}</td>
         <td class="address-col">${data.address || ''}</td>
         <td class="website-col">
-            ${data.website ? `<a href="${data.website}" target="_blank" class="url-link">[Visit]</a>` : ''}
+            ${data.website ? `<a href="${data.website}" target="_blank" class="url-link">${data.website}</a>` : ''}
         </td>
         <td class="phone-col">${data.phone || ''}</td>
         <td class="rating-col">${data.rating || ''}</td>
