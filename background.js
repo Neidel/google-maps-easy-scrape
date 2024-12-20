@@ -372,9 +372,10 @@ function parseLocationData() {
         const placeIdMatch = url.match(/place\/([^\/]+)/);
         const placeId = placeIdMatch ? placeIdMatch[1] : '';
 
-        // Extract address components
+        // Extract address components and clean up the map pin emoji
         const addressElement = mainElement.querySelector('button[data-item-id="address"]');
-        const fullAddress = addressElement ? addressElement.textContent.trim() : '';
+        const fullAddress = addressElement ? 
+            addressElement.textContent.trim().replace(/^📍\s*/, '') : '';
         
         // Extract coordinates
         const coords = { lat: null, lng: null };
