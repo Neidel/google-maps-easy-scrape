@@ -585,12 +585,48 @@ async function processRequest(details) {
     console.log('Processing with request ID:', requestId);
     
     try {
-        // Get the current active tab
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tabs || !tabs[0] || !tabs[0].id) {
-            throw new Error('No active tab found');
+        let tab = null;
+        let retryAttempts = 0;
+        const maxTabRetries = 3;
+        
+        // Retry getting the active tab a few times
+        while (!tab && retryAttempts < maxTabRetries) {
+            try {
+                // Get all tabs first
+                const tabs = await chrome.tabs.query({});
+                
+                // Try to find the Google Maps tab that's being processed
+                tab = tabs.find(t => 
+                    t.url?.includes('google.com/maps') && 
+                    !t.url?.includes('DevTools') &&
+                    t.url?.includes(currentUrl?.split('?')[0] || '')
+                );
+                
+                // If no specific tab found, try any active Maps tab
+                if (!tab) {
+                    tab = tabs.find(t => 
+                        t.url?.includes('google.com/maps') && 
+                        t.active && 
+                        !t.url?.includes('DevTools')
+                    );
+                }
+                
+                // If still no tab, wait and retry
+                if (!tab) {
+                    console.log(`No suitable tab found, attempt ${retryAttempts + 1} of ${maxTabRetries}`);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    retryAttempts++;
+                }
+            } catch (error) {
+                console.error('Error finding tab:', error);
+                retryAttempts++;
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
-        const tab = tabs[0];
+        
+        if (!tab) {
+            throw new Error('Could not find a suitable tab after retries');
+        }
 
         const response = await fetch(details.url);
         const text = await response.text();
@@ -620,6 +656,9 @@ async function processRequest(details) {
         if (!locationData) {
             throw new Error('Could not find location data in response');
         }
+        
+        // Wait a bit for the page to settle before parsing
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         // Pass the tab to parseLocationData
         const parsedLocation = await parseLocationData(tab);
