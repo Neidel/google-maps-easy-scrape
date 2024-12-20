@@ -80,46 +80,42 @@ function updateTableRow(url, data) {
             const row = rows[i];
             
             try {
-                // Update data cells
+                // Update data cells with cleaner data
                 const cells = row.cells;
                 const values = [
-                    data.name,
-                    data.businessType,
-                    data.address?.street,
-                    data.address?.city,
-                    data.address?.state,
-                    data.address?.postalCode,
-                    data.address?.country,
-                    data.rating,
-                    data.coordinates?.lat,
-                    data.coordinates?.lng,
-                    data.placeId
+                    data.name || '',
+                    data.businessType || '',
+                    data.address?.street || '',
+                    data.address?.city || '',
+                    data.address?.state || '',
+                    data.address?.postalCode || '',
+                    data.address?.country || '',
+                    data.rating || '',
+                    data.coordinates?.lat || '',
+                    data.coordinates?.lng || '',
+                    data.placeId || ''
                 ];
                 
                 console.log('Updating cells with values:', values);
                 values.forEach((value, index) => {
                     if (cells[index + 1]) {
-                        cells[index + 1].textContent = value ?? '';
-                    } else {
-                        console.warn(`Cell at index ${index + 1} not found`);
+                        cells[index + 1].textContent = value;
                     }
                 });
                 
-                // Update website cell
+                // Update website cell if present
                 const websiteCell = cells[cells.length - 2];
-                if (websiteCell) {
+                if (websiteCell && data.website) {
                     websiteCell.innerHTML = '';
-                    if (data.website) {
-                        const websiteLink = document.createElement('a');
-                        websiteLink.href = data.website;
-                        websiteLink.textContent = 'Visit';
-                        websiteLink.className = 'url-link';
-                        websiteLink.target = '_blank';
-                        websiteLink.title = data.website;
-                        websiteCell.appendChild(websiteLink);
-                    } else {
-                        websiteCell.textContent = '-';
-                    }
+                    const websiteLink = document.createElement('a');
+                    websiteLink.href = data.website;
+                    websiteLink.textContent = 'Visit';
+                    websiteLink.className = 'url-link';
+                    websiteLink.target = '_blank';
+                    websiteLink.title = data.website;
+                    websiteCell.appendChild(websiteLink);
+                } else if (websiteCell) {
+                    websiteCell.textContent = '-';
                 }
                 
                 console.log('Row updated successfully');
@@ -218,25 +214,21 @@ function handleXhrCaptured(message) {
 
 function processNextUrl() {
     if (isProcessing) {
-        console.log('Already processing, skipping');
+        console.log('Already processing a URL, skipping');
         return;
     }
 
-    // Get all unprocessed URLs by checking against the urlToPlaceId map
+    // Check all URLs against processed data
     const unprocessedUrls = collectedUrls.filter(url => {
         const urlPlaceId = extractPlaceIdFromUrl(url);
         const mappedPlaceId = urlToPlaceId.get(url);
+        const isProcessed = mappedPlaceId && urlPlaceId === mappedPlaceId;
         
-        // Check if URL has been processed using the improved validation
-        const isProcessed = Array.from(processedData.keys()).some(processedId => 
-            validatePlaceIds(urlPlaceId, processedId)
-        );
-
-        console.log('URL processing check:', { 
-            url, 
-            urlPlaceId, 
-            mappedPlaceId, 
-            isProcessed 
+        console.log('URL processing check:', {
+            url,
+            urlPlaceId,
+            mappedPlaceId,
+            isProcessed
         });
         
         return !isProcessed;
@@ -247,45 +239,31 @@ function processNextUrl() {
     if (unprocessedUrls.length > 0) {
         const nextUrl = unprocessedUrls[0];
         console.log('Processing next URL:', nextUrl);
-        isProcessing = true;
-        currentUrl = nextUrl;
-
-        // Update row status before processing
+        
+        // Update UI to show processing state
         updateRowStatus(nextUrl, 'processing');
-
-        // Send message to background script with current state
+        
+        // Send message to process URL
         chrome.runtime.sendMessage({
             type: 'process_url',
-            url: nextUrl,
-            state: {
-                collectedUrls,
-                processedData: Array.from(processedData.entries()),
-                urlToPlaceId: Array.from(urlToPlaceId.entries()),
-                isProcessing,
-                currentUrl
-            }
-        }, () => {
-            // Check back in 15 seconds to make sure processing hasn't stalled
-            setTimeout(() => {
-                if (isProcessing && currentUrl === nextUrl) {
-                    console.log('Processing appears stalled, retrying...');
-                    isProcessing = false;
-                    currentUrl = null;
-                    updateRowStatus(nextUrl, 'error', 'Processing stalled, retrying...');
-                    setTimeout(() => {
-                        if (!isProcessing) {
-                            processNextUrl();
-                        }
-                    }, 2000);
-                }
-            }, 15000);
+            url: nextUrl
         });
+        
+        isProcessing = true;
+        currentUrl = nextUrl;
+        
+        // Set up stall detection
+        stallTimeout = setTimeout(() => {
+            console.log('Processing appears stalled, retrying...');
+            updateRowStatus(nextUrl, 'error', 'Processing stalled, retrying...');
+            isProcessing = false;
+            currentUrl = null;
+            processNextUrl();
+        }, 15000); // 15 second timeout
     } else {
         console.log('All URLs processed');
-        if (processButton) processButton.disabled = false;
         isProcessing = false;
         currentUrl = null;
-        chrome.runtime.sendMessage({ type: 'processing_complete' });
     }
 }
 

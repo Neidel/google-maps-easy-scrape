@@ -303,204 +303,107 @@ function findLocationData(obj) {
 }
 
 // Update the place ID validation function
-function validatePlaceIds(urlPlaceId, responsePlaceId) {
-    if (!urlPlaceId || !responsePlaceId) {
-        console.log('Skipping validation - missing place ID:', { urlPlaceId, responsePlaceId });
-        return true; // Skip validation if either ID is missing
-    }
-
-    // Log original values
-    console.log('Validating place IDs:', { urlPlaceId, responsePlaceId });
-
-    // If response ID matches the new format (contains underscore and no hex), accept it
-    if (responsePlaceId.includes('_') && responsePlaceId.includes('RkZ')) {
-        console.log('Found new format response ID, accepting as valid');
-        return true;
-    }
-
-    // Normalize both IDs by removing common prefixes and converting to lowercase
-    const normalizeId = (id) => {
-        return id.toString()
-            .replace(/^0x/, '')
-            .replace(/^ChIJ/, '')
-            .replace(/:/g, '')  // Remove colons
-            .replace(/\s+/g, '') // Remove spaces
-            .toLowerCase();
-    };
-
-    // Extract hex ID from URL if present
-    const extractHexId = (str) => {
-        const hexMatch = str.match(/0x[0-9a-fA-F]+/);
-        return hexMatch ? hexMatch[0].replace(/^0x/, '') : str;
-    };
-
-    let normalizedUrlId = normalizeId(urlPlaceId);
-    let normalizedResponseId = normalizeId(responsePlaceId);
-
-    // Try to extract hex format if available
-    const urlHexId = extractHexId(normalizedUrlId);
-    const responseHexId = extractHexId(normalizedResponseId);
-
-    // Compare both normalized and hex versions
-    const isMatch = normalizedUrlId === normalizedResponseId || 
-                   urlHexId === responseHexId ||
-                   normalizedUrlId.includes(responseHexId) ||
-                   responseHexId.includes(normalizedUrlId);
-
-    console.log('Place ID comparison:', {
-        original: { urlPlaceId, responsePlaceId },
-        normalized: { normalizedUrlId, normalizedResponseId },
-        hex: { urlHexId, responseHexId },
-        isMatch
-    });
-
-    return isMatch;
+function validatePlaceIds(id1, id2) {
+    if (!id1 || !id2) return false;
+    return id1.trim() === id2.trim();
 }
 
 // Update the parseLocationData function
-function parseLocationData(locationData) {
-    if (!locationData) {
-        console.log('No location data provided');
-        return null;
-    }
-
-    console.log('Parsing location data:', locationData);
-
-    // Extract place ID first to validate against URL
-    const placeId = locationData[3] || locationData[0] || ''; // Try both positions for place ID
-    const urlPlaceId = currentUrl ? extractPlaceIdFromUrl(currentUrl) : null;
-    
-    // Log place IDs for debugging
-    console.log('Place IDs before validation:', { 
-        urlPlaceId, 
-        responsePlaceId: placeId, 
-        url: currentUrl,
-        locationData: JSON.stringify(locationData).substring(0, 200) + '...' 
-    });
-
-    // Skip place ID validation if we can't find a place ID in the URL
-    // or if the response has the new format
-    if (!urlPlaceId || (placeId && placeId.includes('_') && placeId.includes('RkZ'))) {
-        console.log('Skipping validation - special case');
-    } else if (!validatePlaceIds(urlPlaceId, placeId)) {
-        console.log('Place ID validation failed:', { 
-            urlPlaceId, 
-            responsePlaceId: placeId,
-            locationData: locationData[3]
-        });
-        return null;
-    }
-
-    // Extract name from multiple possible locations
-    const name = locationData[0] || 
-                 locationData[1] || 
-                 locationData[16]?.[0]?.[0] || 
-                 locationData[16]?.[11]?.[0] || 
-                 '';
-
-    // Create the parsed location object with more flexible data extraction
-    const parsedLocation = {
-        name: name,
-        placeId: placeId,
-        coordinates: {
-            lat: locationData[4]?.[2] || locationData[16]?.[0]?.[2] || 0,
-            lng: locationData[4]?.[3] || locationData[16]?.[0]?.[3] || 0
-        },
-        address: {
-            full: '',
-            street: '',
-            city: '',
-            state: '',
-            postalCode: '',
-            country: ''
-        },
-        rating: locationData[16]?.[0]?.[8] || locationData[16]?.[4]?.[8] || 0,
-        businessType: locationData[16]?.[0]?.[9]?.[0]?.[0] || locationData[16]?.[13]?.[0] || '',
-        timezone: locationData[10] || locationData[16]?.[0]?.[10] || '',
-        website: locationData[16]?.[0]?.[7]?.[0] || locationData[16]?.[7]?.[0] || '',
-        timestamp: new Date().toISOString()
-    };
-
-    // Try multiple paths for address data
-    const addressPaths = [
-        locationData[16]?.[0]?.[5],
-        locationData[16]?.[5],
-        locationData[16]?.[0]?.[15]?.[1],
-        locationData[16]?.[15]?.[1]
-    ];
-
-    // Try to find a valid address from any path
-    for (const fullAddress of addressPaths) {
-        if (fullAddress) {
-            if (typeof fullAddress === 'string') {
-                // Parse the full address string
-                const parts = fullAddress.split(', ');
-                if (parts.length >= 3) {
-                    parsedLocation.address = {
-                        full: fullAddress,
-                        street: parts[0] || '',
-                        city: parts[1] || '',
-                        state: (parts[2].split(' ')[0] || '').trim(),
-                        postalCode: (parts[2].split(' ')[1] || '').trim(),
-                        country: parts[3] || 'Canada'
-                    };
-                    break;
+async function parseLocationData(tab) {
+    try {
+        const result = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            function: () => {
+                function cleanText(text) {
+                    return text ? text.trim().replace(/\s+/g, ' ') : '';
                 }
-            } else if (Array.isArray(fullAddress)) {
-                // Handle structured address data
-                parsedLocation.address = {
-                    full: fullAddress.join(', '),
-                    street: fullAddress[1] || '',
-                    city: fullAddress[3] || '',
-                    state: fullAddress[5] || '',
-                    postalCode: fullAddress[4] || '',
-                    country: fullAddress[6] === 'CA' ? 'Canada' : fullAddress[6] || ''
+                
+                // Get the main header element
+                const header = document.querySelector('h1');
+                const name = header ? cleanText(header.textContent) : '';
+                
+                // Get business type from category text
+                const categoryElement = document.querySelector('button[jsaction*="pane.rating.category"]');
+                const businessType = categoryElement ? cleanText(categoryElement.textContent) : '';
+                
+                // Get address components
+                const addressElement = document.querySelector('button[data-item-id*="address"]');
+                let address = {};
+                
+                if (addressElement) {
+                    const fullAddress = cleanText(addressElement.textContent);
+                    const parts = fullAddress.split(',').map(part => part.trim());
+                    
+                    if (parts.length >= 3) {
+                        address = {
+                            street: parts[0],
+                            city: parts[parts.length - 3],
+                            state: parts[parts.length - 2],
+                            country: parts[parts.length - 1],
+                            postalCode: parts[parts.length - 2].match(/\d+/) ? parts[parts.length - 2].match(/\d+/)[0] : ''
+                        };
+                    }
+                }
+                
+                // Get rating
+                const ratingElement = document.querySelector('div[role="img"][aria-label*="stars"]');
+                const rating = ratingElement ? ratingElement.getAttribute('aria-label').match(/[\d.]+/)[0] : '';
+                
+                // Get website
+                const websiteButton = document.querySelector('a[data-item-id*="authority"]');
+                const website = websiteButton ? websiteButton.href : '';
+                
+                // Get coordinates from URL
+                const url = window.location.href;
+                const coordsMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+                const coordinates = coordsMatch ? {
+                    lat: coordsMatch[1],
+                    lng: coordsMatch[2]
+                } : {};
+                
+                // Get place ID from URL
+                const placeId = url.match(/place\/([^/]+)/)?.[1]?.split('?')[0] || '';
+                
+                return {
+                    name,
+                    businessType,
+                    address,
+                    rating,
+                    website,
+                    coordinates,
+                    placeId
                 };
-                break;
             }
+        });
+        
+        if (!result || !result[0] || !result[0].result) {
+            throw new Error('Failed to parse location data');
         }
+        
+        return result[0].result;
+    } catch (error) {
+        console.error('Error parsing location data:', error);
+        throw error;
     }
-
-    // Log the final parsed location
-    console.log('Parsed location result:', {
-        name: parsedLocation.name,
-        placeId: parsedLocation.placeId,
-        coordinates: parsedLocation.coordinates,
-        hasAddress: !!parsedLocation.address.street
-    });
-
-    return parsedLocation;
 }
 
 // Update the extractPlaceIdFromUrl function
 function extractPlaceIdFromUrl(url) {
     try {
-        // Try multiple patterns to extract place ID
-        const patterns = [
-            /!1s([^!]+)!/,                     // Standard format
-            /place\/[^/]+\/([^/]+)/,           // Alternative format
-            /data=.*?!1s([^!]+)!/,             // Data parameter format
-            /[?&]pb=.*?!1s([^!]+)!/,           // Preview format
-            /0x[0-9a-fA-F]+:[0-9a-fA-F]+/,     // Direct hex format
-            /ChIJ[a-zA-Z0-9_-]+/               // ChIJ format
-        ];
-
-        for (const pattern of patterns) {
-            const match = url.match(pattern);
-            if (match && match[1]) {
-                return match[1];
-            }
+        const urlObj = new URL(url);
+        const pathParts = urlObj.pathname.split('/');
+        const placeIndex = pathParts.indexOf('place');
+        
+        if (placeIndex !== -1 && pathParts[placeIndex + 1]) {
+            const placeId = pathParts[placeIndex + 1].split('?')[0];
+            console.log('Extracted place ID:', placeId);
+            return placeId;
         }
-
-        // If no pattern matches but URL contains a place ID in hex format
-        const hexMatch = url.match(/0x[0-9a-fA-F]+:[0-9a-fA-F]+/);
-        if (hexMatch) {
-            return hexMatch[0];
-        }
-
+        
+        console.warn('No place ID found in URL:', url);
         return null;
-    } catch (e) {
-        console.error('Error extracting place ID:', e);
+    } catch (error) {
+        console.error('Error extracting place ID:', error);
         return null;
     }
 }
@@ -593,16 +496,23 @@ async function updateTab(url) {
         
         if (targetTab) {
             try {
+                // Update tab and wait for it to complete loading
                 await chrome.tabs.update(targetTab.id, { 
                     url: url,
                     active: true 
                 });
+                
+                // Add delay to ensure page loads
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
                 return true;
             } catch (error) {
                 console.error('Error updating existing tab:', error);
                 // If update fails, try to create new tab
                 if (!error.message.includes('No tab with id')) {
                     const newTab = await chrome.tabs.create({ url: url, active: true });
+                    // Add delay for new tab
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                     return true;
                 }
                 return false;
@@ -610,6 +520,8 @@ async function updateTab(url) {
         } else {
             // Create new tab if no suitable tab found
             const newTab = await chrome.tabs.create({ url: url, active: true });
+            // Add delay for new tab
+            await new Promise(resolve => setTimeout(resolve, 2000));
             return true;
         }
     } catch (error) {
