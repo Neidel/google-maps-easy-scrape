@@ -234,18 +234,15 @@ function processNextUrl() {
     // Check all URLs against processed data
     const unprocessedUrls = collectedUrls.filter(url => {
         const urlPlaceId = extractPlaceIdFromUrl(url);
-        const mappedPlaceId = urlToPlaceId.get(url);
         
-        // Check if URL has been processed
-        const isProcessed = Array.from(processedData.keys()).some(processedId => {
-            const processedData = urlToPlaceId.get(url);
-            return processedData && validatePlaceIds(urlPlaceId, processedData);
+        // Check if this URL has been processed by checking if its place ID exists in processedData
+        const isProcessed = Array.from(processedData.entries()).some(([processedId, data]) => {
+            return validatePlaceIds(urlPlaceId, processedId);
         });
         
         console.log('URL processing check:', {
             url,
             urlPlaceId,
-            mappedPlaceId,
             isProcessed,
             processedDataSize: processedData.size,
             urlToPlaceIdSize: urlToPlaceId.size
@@ -271,7 +268,14 @@ function processNextUrl() {
         // Send message to process URL
         chrome.runtime.sendMessage({
             type: 'process_url',
-            url: nextUrl
+            url: nextUrl,
+            state: {
+                collectedUrls,
+                processedData: Array.from(processedData.entries()),
+                urlToPlaceId: Array.from(urlToPlaceId.entries()),
+                isProcessing: true,
+                currentUrl: nextUrl
+            }
         });
         
         isProcessing = true;
@@ -658,7 +662,7 @@ function downloadCsv(csv, filename) {
 function validatePlaceIds(urlPlaceId, responsePlaceId) {
     if (!urlPlaceId || !responsePlaceId) {
         console.log('Skipping validation - missing place ID:', { urlPlaceId, responsePlaceId });
-        return true; // Skip validation if either ID is missing
+        return false; // Don't validate if either ID is missing
     }
 
     // Log original values
@@ -674,29 +678,15 @@ function validatePlaceIds(urlPlaceId, responsePlaceId) {
             .toLowerCase();
     };
 
-    // Extract hex ID from URL if present
-    const extractHexId = (str) => {
-        const hexMatch = str.match(/0x[0-9a-fA-F]+/);
-        return hexMatch ? hexMatch[0].replace(/^0x/, '') : str;
-    };
+    const normalizedUrlId = normalizeId(urlPlaceId);
+    const normalizedResponseId = normalizeId(responsePlaceId);
 
-    let normalizedUrlId = normalizeId(urlPlaceId);
-    let normalizedResponseId = normalizeId(responsePlaceId);
-
-    // Try to extract hex format if available
-    const urlHexId = extractHexId(normalizedUrlId);
-    const responseHexId = extractHexId(normalizedResponseId);
-
-    // Compare both normalized and hex versions
-    const isMatch = normalizedUrlId === normalizedResponseId || 
-                   urlHexId === responseHexId ||
-                   normalizedUrlId.includes(responseHexId) ||
-                   responseHexId.includes(normalizedUrlId);
+    // Compare normalized versions
+    const isMatch = normalizedUrlId === normalizedResponseId;
 
     console.log('Place ID comparison:', {
         original: { urlPlaceId, responsePlaceId },
         normalized: { normalizedUrlId, normalizedResponseId },
-        hex: { urlHexId, responseHexId },
         isMatch
     });
 
