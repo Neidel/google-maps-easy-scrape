@@ -106,6 +106,8 @@ function resetState() {
     retryCount = 0;
     processingQueue = [];
     currentRequestId = null;
+    isProcessingLocked = false;
+    appState.isProcessing = false;
 }
 
 // Listen for messages from popup
@@ -181,6 +183,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 }, 10000); // Increased timeout to 10 seconds
             } else {
                 console.log('Skipping URL processing - already processing, locked, or complete');
+                // If we're locked but should be processing, try to recover
+                if (isProcessingLocked && currentUrl) {
+                    console.log('Detected locked state, attempting to recover');
+                    setTimeout(() => {
+                        resetState();
+                        chrome.runtime.sendMessage({ type: 'retry_processing' });
+                    }, 5000);
+                }
             }
             
             sendResponse({ success: true });
@@ -493,6 +503,11 @@ function extractPlaceIdFromUrl(url) {
 function handleError() {
     console.log('Handling error for URL:', currentUrl);
     
+    if (!currentUrl) {
+        console.log('No current URL to retry');
+        return;
+    }
+    
     // Only retry if we haven't exceeded the limit
     if (retryCount < MAX_RETRIES) {
         console.log(`Scheduling retry ${retryCount + 1} of ${MAX_RETRIES}`);
@@ -505,7 +520,7 @@ function handleError() {
         // Add delay between retries
         const retryDelay = Math.min(2000 * Math.pow(2, retryCount - 1), 10000);
         
-        setTimeout(() => {
+        setTimeout(async () => {
             if (currentUrl && !isComplete) {
                 console.log('Retrying URL:', currentUrl);
                 // Reset processing flags
@@ -513,10 +528,11 @@ function handleError() {
                 hasProcessedXhr = false;
                 isWaitingForXhr = true;
                 
-                chrome.tabs.update({ url: currentUrl }).catch(error => {
-                    console.error('Error updating tab:', error);
+                const success = await updateTab(currentUrl);
+                if (!success) {
+                    console.error('Failed to update tab during retry');
                     moveToNextUrl();
-                });
+                }
             }
         }, retryDelay);
     } else {
@@ -529,12 +545,6 @@ function handleError() {
 function moveToNextUrl() {
     console.log('Moving to next URL');
     
-    // Reset all processing flags
-    isProcessingLocked = false;
-    hasProcessedXhr = false;
-    isWaitingForXhr = false;
-    retryCount = 0;
-    
     // Send auth_failed message to popup
     if (currentUrl) {
         chrome.runtime.sendMessage({
@@ -546,10 +556,12 @@ function moveToNextUrl() {
         });
     }
     
+    // Reset all processing flags
+    resetState();
+    
     // Clear current URL
     currentUrl = null;
     lastProcessedUrl = null;
-    currentRequestId = null;
 }
 
 // Update error handling for tab updates

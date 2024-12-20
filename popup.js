@@ -264,6 +264,15 @@ function processNextUrl() {
                 isProcessing,
                 currentUrl
             }
+        }, () => {
+            // Check back in 15 seconds to make sure processing hasn't stalled
+            setTimeout(() => {
+                if (isProcessing && currentUrl === nextUrl) {
+                    console.log('Processing appears stalled, retrying...');
+                    isProcessing = false;
+                    processNextUrl();
+                }
+            }, 15000);
         });
     } else {
         console.log('All URLs processed');
@@ -748,6 +757,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 processNextUrl();
             }
         }, 5000);
+    } else if (message.type === 'retry_processing') {
+        console.log('Received retry processing signal');
+        isProcessing = false;
+        setTimeout(() => {
+            if (!isProcessing) {
+                processNextUrl();
+            }
+        }, 2000);
     }
 });
 
