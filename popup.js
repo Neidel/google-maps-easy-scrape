@@ -227,13 +227,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Add event listeners
     collectButton.addEventListener('click', async () => {
         try {
+            collectButton.disabled = true;
+            
+            // Navigate to the specific URL
+            const targetUrl = "https://www.google.com/maps/search/rv+park+canada/@54.6606182,-121.0448918,6.14z/data=!4m2!2m1!6e1?entry=ttu&g_ep=EgoyMDI0MTIxMS4wIKXMDSoASAFQAw%3D%3D";
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!tab?.url?.includes('google.com/maps')) {
-                alert('Please navigate to Google Maps first');
+            
+            if (!tab?.id) {
+                alert('Error: Could not find active tab');
+                collectButton.disabled = false;
                 return;
             }
 
-            collectButton.disabled = true;
+            // Update the tab URL and wait for navigation
+            await chrome.tabs.update(tab.id, { url: targetUrl });
+            
+            // Wait for 3 seconds before collecting URLs
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
             const urls = await collectUrlsFromPage();
             if (urls && urls.length > 0) {
                 AppState.collectedUrls = urls;
@@ -241,7 +252,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 processButton.disabled = false;
                 clearButton.disabled = false;
             } else {
-                alert('No URLs found. Please scroll through the search results in Google Maps.');
+                alert('No URLs found. Please try again or scroll through the search results.');
                 collectButton.disabled = false;
             }
         } catch (error) {
