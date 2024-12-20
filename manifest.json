@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
-    "name": "Umbric - Google Maps Utility",
+    "name": "Umbric - RV Park Scraper",
     "version": "1.0",
-    "description": "Easily scrape location data from Google Maps",
+    "description": "Easily scrape location data from Google Maps for RV Parks",
     "permissions": [
         "activeTab",
         "scripting",
