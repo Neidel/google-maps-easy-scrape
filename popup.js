@@ -318,6 +318,8 @@ function initializeTableHeaders() {
             <th class="website-col">Website</th>
             <th class="url-col">Maps URL</th>
             <th class="phone-col">Phone</th>
+            <th class="lat-col">Latitude</th>
+            <th class="lon-col">Longitude</th>
             <th class="details-col">Details</th>
         </tr>
     `;
@@ -358,6 +360,8 @@ function updateTableRow(url, data) {
             <a href="${url}" target="_blank" class="url-link">[View]</a>
         </td>
         <td class="phone-col">${data.phone || ''}</td>
+        <td class="lat-col">${data.lat || ''}</td>
+        <td class="lon-col">${data.lon || ''}</td>
         <td class="details-col">${data.details || ''}</td>
     `;
 }
@@ -382,7 +386,7 @@ function clearTable() {
 
 // Function to download CSV
 function downloadCsv() {
-    const headers = ['Name', 'Rating', 'Address', 'Website', 'Maps URL', 'Phone', 'Details'];
+    const headers = ['Name', 'Rating', 'Address', 'Website', 'Maps URL', 'Phone', 'Latitude', 'Longitude', 'Details'];
     const rows = Array.from(AppState.processedData.values()).map(data => [
         data.name || '',
         data.rating || '',
@@ -390,6 +394,8 @@ function downloadCsv() {
         data.website || '',
         data.url || '',
         data.phone || '',
+        data.lat || '',
+        data.lon || '',
         data.details || ''
     ]);
 

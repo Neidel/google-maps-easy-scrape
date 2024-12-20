@@ -367,8 +367,46 @@ async function findLocationData() {
     }
 }
 
-function parseLocationData() {
+function parseLocationData(html, url, xhr) {
     try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        
+        // Extract coordinates from XHR data
+        let lat = null;
+        let lon = null;
+        if (xhr) {
+            try {
+                const xhrData = JSON.parse(xhr);
+                // Look for coordinate array in the XHR data
+                const findCoords = (obj) => {
+                    if (Array.isArray(obj)) {
+                        for (let item of obj) {
+                            if (Array.isArray(item) && item.length === 4 && 
+                                item[0] === null && item[1] === null && 
+                                typeof item[2] === 'number' && typeof item[3] === 'number') {
+                                return [item[2], item[3]];
+                            }
+                            const result = findCoords(item);
+                            if (result) return result;
+                        }
+                    } else if (typeof obj === 'object' && obj !== null) {
+                        for (let key in obj) {
+                            const result = findCoords(obj[key]);
+                            if (result) return result;
+                        }
+                    }
+                    return null;
+                };
+                const coords = findCoords(xhrData);
+                if (coords) {
+                    [lat, lon] = coords;
+                }
+            } catch (e) {
+                console.error('Error parsing XHR data:', e);
+            }
+        }
+
         // Find the main element containing place information
         const mainElement = document.querySelector('div[role="main"]');
         if (!mainElement) return null;
@@ -378,7 +416,6 @@ function parseLocationData() {
         const name = nameElement ? nameElement.textContent.trim() : '';
 
         // Extract place ID from URL
-        const url = window.location.href;
         const placeIdMatch = url.match(/place\/([^\/]+)/);
         const placeId = placeIdMatch ? placeIdMatch[1] : '';
 
@@ -399,14 +436,6 @@ function parseLocationData() {
                 .trim();
         }
         
-        // Extract coordinates
-        const coords = { lat: null, lng: null };
-        const coordsMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-        if (coordsMatch) {
-            coords.lat = parseFloat(coordsMatch[1]);
-            coords.lng = parseFloat(coordsMatch[2]);
-        }
-
         // Extract business type
         const businessTypeElement = mainElement.querySelector('button[jsaction="pane.rating.category"]');
         const businessType = businessTypeElement ? businessTypeElement.textContent.trim() : '';
