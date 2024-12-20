@@ -332,7 +332,7 @@ function updateTable(urls) {
         row.innerHTML = `
             <td class="status-col">Pending</td>
             <td colspan="5" class="url-cell">
-                <a href="${url}" target="_blank" class="url-link">${url}</a>
+                <a href="${url}" target="_blank" class="url-link">[Page Link]</a>
             </td>
         `;
         tbody.appendChild(row);
@@ -351,7 +351,7 @@ function updateTableRow(url, data) {
         <td class="phone-col">${data.phone || ''}</td>
         <td class="rating-col">${data.rating || ''}</td>
         <td class="url-col">
-            <a href="${url}" target="_blank" class="url-link">View</a>
+            <a href="${url}" target="_blank" class="url-link">[View]</a>
         </td>
     `;
 }
