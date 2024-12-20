@@ -439,9 +439,40 @@ function parseLocationData() {
                 .trim() : '';
         }
 
-        // Extract website
+        // Enhanced website extraction
+        let website = '';
         const websiteElement = mainElement.querySelector('a[data-item-id="authority"]');
-        const website = websiteElement ? websiteElement.href : '';
+        if (websiteElement) {
+            // Get the display text and href
+            const displayUrl = websiteElement.textContent
+                .trim()
+                .replace(/^[^\w\d]*/, '')
+                .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+                .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            
+            // Get the actual href
+            const href = websiteElement.href;
+            
+            // Prefer the href if it's a valid URL, otherwise use the display text
+            try {
+                new URL(href);
+                website = href;
+            } catch {
+                try {
+                    // Try to construct a URL from the display text
+                    if (!displayUrl.startsWith('http')) {
+                        website = 'http://' + displayUrl;
+                    } else {
+                        website = displayUrl;
+                    }
+                    new URL(website); // Validate the URL
+                } catch {
+                    website = ''; // Reset if invalid
+                }
+            }
+        }
 
         // Extract rating information
         const ratingElement = mainElement.querySelector('div[role="img"][aria-label*="stars"]');
