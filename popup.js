@@ -145,6 +145,7 @@ function handleXhrCaptured(message) {
                     updateTableRow(processedUrl, data);
                     updateRowStatus(processedUrl, 'completed');
                     clearStallTimeout();
+                    if (downloadCsvButton) downloadCsvButton.disabled = false;
                 }
             }
 
