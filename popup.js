@@ -305,14 +305,19 @@ function initializeTableHeaders() {
         <tr>
             <th class="status-col">Status</th>
             <th class="name-col">Name</th>
+            <th class="street-col">Street</th>
+            <th class="city-col">City</th>
+            <th class="state-col">State/Province</th>
+            <th class="postal-col">Postal Code</th>
+            <th class="country-col">Country</th>
             <th class="rating-col">Rating</th>
-            <th class="address-col">Address</th>
-            <th class="website-col">Website</th>
-            <th class="url-col">Maps URL</th>
-            <th class="phone-col">Phone</th>
             <th class="lat-col">Latitude</th>
             <th class="lon-col">Longitude</th>
+            <th class="website-col">Website</th>
+            <th class="maps-col">Maps URL</th>
             <th class="details-col">Details</th>
+            <th class="about-col">About</th>
+            <th class="images-col">Images</th>
         </tr>
     `;
 }
@@ -340,67 +345,161 @@ function updateTableRow(url, data) {
     const row = resultsTable.querySelector(`tr[data-url="${url}"]`);
     if (!row) return;
 
+    // Split address into components
+    const addressParts = parseAddress(data.address || '');
+
     row.innerHTML = `
         <td class="status-col">Completed</td>
         <td class="name-col">${data.name || ''}</td>
+        <td class="street-col">${addressParts.street || ''}</td>
+        <td class="city-col">${addressParts.city || ''}</td>
+        <td class="state-col">${addressParts.state || ''}</td>
+        <td class="postal-col">${addressParts.postalCode || ''}</td>
+        <td class="country-col">${addressParts.country || ''}</td>
         <td class="rating-col">${data.rating || ''}</td>
-        <td class="address-col">${data.address || ''}</td>
-        <td class="website-col">
-            ${data.website ? `<a href="${data.website}" target="_blank" class="url-link">${data.website}</a>` : ''}
-        </td>
-        <td class="url-col">
-            <a href="${url}" target="_blank" class="url-link">[View]</a>
-        </td>
-        <td class="phone-col">${data.phone || ''}</td>
         <td class="lat-col">${data.lat || ''}</td>
         <td class="lon-col">${data.lon || ''}</td>
-        <td class="details-col">${data.details || ''}</td>
+        <td class="website-col">
+            ${data.website ? `<a href="${data.website}" target="_blank" class="url-link">[View]</a>` : ''}
+        </td>
+        <td class="maps-col">
+            <a href="${url}" target="_blank" class="url-link">[View]</a>
+        </td>
+        <td class="details-col">${data.details ? 'Extracted' : ''}</td>
+        <td class="about-col">${data.about ? 'Extracted' : ''}</td>
+        <td class="images-col">${data.imageUrls ? data.imageUrls.length : '0'}</td>
     `;
 }
 
-// Function to update row status
-function updateRowStatus(url, status, message = '') {
-    const row = resultsTable.querySelector(`tr[data-url="${url}"]`);
-    if (!row) return;
+// Function to parse address into components
+function parseAddress(fullAddress) {
+    const parts = {
+        street: '',
+        city: '',
+        state: '',
+        postalCode: '',
+        country: ''
+    };
 
-    const statusCell = row.querySelector('.status-col');
-    if (!statusCell) return;
+    if (!fullAddress) return parts;
 
-    statusCell.textContent = message || status;
-    statusCell.className = `status-col ${status}`;
-}
+    // Split address by commas
+    const components = fullAddress.split(',').map(part => part.trim());
 
-// Function to clear table
-function clearTable() {
-    const tbody = resultsTable.querySelector('tbody');
-    tbody.innerHTML = '';
+    if (components.length >= 1) {
+        parts.street = components[0];
+    }
+    
+    if (components.length >= 2) {
+        parts.city = components[1];
+    }
+    
+    if (components.length >= 3) {
+        // Check for Canadian postal code format (A1A 1A1) or US format (12345 or 12345-1234)
+        const statePostalMatch = components[2].match(/([A-Z]{2})\s*((?:[A-Z]\d[A-Z]\s*\d[A-Z]\d)|(?:\d{5}(?:-\d{4})?))/) ||
+                                components[2].match(/([A-Z]{2})\s*([A-Z]\d[A-Z]\s*\d[A-Z]\d)/);
+        if (statePostalMatch) {
+            parts.state = statePostalMatch[1];
+            parts.postalCode = statePostalMatch[2].replace(/\s+/g, ' ').trim();
+        } else {
+            parts.state = components[2];
+        }
+    }
+    
+    if (components.length >= 4) {
+        // If postal code wasn't in state component, check the next component
+        if (!parts.postalCode) {
+            const postalMatch = components[3].match(/(?:[A-Z]\d[A-Z]\s*\d[A-Z]\d)|(?:\d{5}(?:-\d{4})?)/);
+            if (postalMatch) {
+                parts.postalCode = postalMatch[0].replace(/\s+/g, ' ').trim();
+                parts.country = components[3].replace(postalMatch[0], '').trim();
+            } else {
+                parts.country = components[3];
+            }
+        } else {
+            parts.country = components[3];
+        }
+    }
+
+    return parts;
 }
 
 // Function to download CSV
 function downloadCsv() {
-    const headers = ['Name', 'Rating', 'Address', 'Website', 'Maps URL', 'Phone', 'Latitude', 'Longitude', 'Details'];
-    const rows = Array.from(AppState.processedData.values()).map(data => [
-        data.name || '',
-        data.rating || '',
-        data.address || '',
-        data.website || '',
-        data.url || '',
-        data.phone || '',
-        data.lat || '',
-        data.lon || '',
-        data.details || ''
-    ]);
+    // Find the maximum number of images across all entries
+    const maxImages = Math.max(...Array.from(AppState.processedData.values())
+        .map(data => (data.imageUrls || []).length));
+
+    const headers = [
+        'Name',
+        'Business Type',
+        'Street Address',
+        'City',
+        'State/Province',
+        'Postal Code',
+        'Country',
+        'Rating',
+        'Latitude',
+        'Longitude',
+        'Place ID',
+        'Website URL',
+        'Maps URL',
+        'Details',
+        'About',
+        // Add numbered columns for each possible image
+        ...Array(maxImages).fill(0).map((_, i) => `Image ${i + 1}`)
+    ];
+
+    const rows = Array.from(AppState.processedData.values()).map(data => {
+        const addressParts = parseAddress(data.address || '');
+        const imageUrls = data.imageUrls || [];
+        
+        return [
+            data.name || '',
+            data.businessType || '',
+            addressParts.street || '',
+            addressParts.city || '',
+            addressParts.state || '',
+            addressParts.postalCode || '',
+            addressParts.country || '',
+            data.rating || '',
+            data.lat || '',
+            data.lon || '',
+            data.placeId || '',
+            data.website || '',
+            data.url || '',
+            data.details || '',
+            data.about || '',
+            // Spread the image URLs into separate columns, padding with empty strings if needed
+            ...imageUrls,
+            ...Array(maxImages - imageUrls.length).fill('')
+        ];
+    });
 
     const csvContent = [
         headers.join(','),
-        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+        ...rows.map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))
     ].join('\n');
+
+    // Create timestamp for filename
+    const now = new Date();
+    const timestamp = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, '0'),
+        String(now.getDate()).padStart(2, '0'),
+        '.',
+        String(now.getHours()).padStart(2, '0'),
+        '-',
+        String(now.getMinutes()).padStart(2, '0'),
+        '-',
+        String(now.getSeconds()).padStart(2, '0')
+    ].join('');
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'google_maps_data.csv';
+    a.download = `google_maps_data.${timestamp}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
 }
@@ -437,6 +536,24 @@ function extractPlaceIdFromUrl(url) {
 function validatePlaceIds(urlPlaceId, dataPlaceId) {
     if (!urlPlaceId || !dataPlaceId) return false;
     return urlPlaceId === dataPlaceId;
+}
+
+// Function to update row status
+function updateRowStatus(url, status, message = '') {
+    const row = resultsTable.querySelector(`tr[data-url="${url}"]`);
+    if (!row) return;
+
+    const statusCell = row.querySelector('.status-col');
+    if (!statusCell) return;
+
+    statusCell.textContent = message || status;
+    statusCell.className = `status-col ${status}`;
+}
+
+// Function to clear table
+function clearTable() {
+    const tbody = resultsTable.querySelector('tbody');
+    tbody.innerHTML = '';
 }
 
 // ... rest of existing code ...

@@ -67,7 +67,6 @@
       border: none;
       border-bottom: 1px solid #f5f5f5;
       line-height: 1.2;
-      min-width: 50px;
     }
     th {
       background-color: #fafafa;
@@ -83,7 +82,7 @@
       border-bottom: none;
     }
     .status-col {
-      width: 80px;
+      width: auto;
       min-width: 80px;
     }
     .url-col {
@@ -91,16 +90,43 @@
       min-width: 60px;
     }
     .name-col {
+      min-width: 120px;
+    }
+    .type-col {
+      min-width: 120px;
+    }
+    .street-col {
       min-width: 150px;
     }
-    .address-col {
+    .city-col {
+      min-width: 80px;
+    }
+    .state-col {
+      min-width: 80px;
+    }
+    .postal-col {
+      min-width: 80px;
+    }
+    .country-col {
+      min-width: 80px;
+    }
+    .placeid-col {
       min-width: 200px;
     }
-    .phone-col {
-      min-width: 100px;
+    .maps-col {
+      width: auto;
+      min-width: 60px;
     }
     .rating-col {
-      min-width: 70px;
+      min-width: 60px;
+    }
+    .about-col {
+      min-width: 80px;
+    }
+    .images-col {
+      width: auto;
+      min-width: 60px;
+      text-align: center;
     }
     .spinner {
       display: inline-block;
@@ -158,8 +184,8 @@
       align-items: center;
     }
     .table-container {
-      width: 700px;
-      height: 200px;
+      width: 100%;
+      max-width: 900px;
       margin-top: 15px;
       border: 1px solid #f5f5f5;
       border-radius: 4px;
@@ -238,6 +264,19 @@
       padding: 6px;
       margin: 0;
     }
+    .details-col {
+      width: auto;
+      min-width: 60px;
+    }
+    .images-col {
+      width: auto;
+      min-width: 60px;
+      text-align: center;
+    }
+    thead {
+      position: sticky;
+      top: 0;
+    }
   </style>  
 </head>
 <body>
@@ -261,7 +300,25 @@
 
   <div class="table-container">
     <table id="resultsTable">
-      <thead></thead>
+      <thead>
+        <tr>
+          <th class="status-col">Status</th>
+          <th class="name-col">Name</th>
+          <th class="street-col">Street</th>
+          <th class="city-col">City</th>
+          <th class="state-col">State/Province</th>
+          <th class="postal-col">Postal Code</th>
+          <th class="country-col">Country</th>
+          <th class="rating-col">Rating</th>
+          <th class="lat-col">Latitude</th>
+          <th class="lon-col">Longitude</th>
+          <th class="website-col">Website</th>
+          <th class="maps-col">Maps URL</th>
+          <th class="details-col">Details</th>
+          <th class="about-col">About</th>
+          <th class="images-col">Images</th>
+        </tr>
+      </thead>
       <tbody></tbody>
     </table>
   </div>

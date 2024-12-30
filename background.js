@@ -357,7 +357,8 @@ async function findLocationData() {
         });
 
         if (result && result[0]?.result) {
-            return result[0].result;
+            // Since parseLocationData now returns a promise, we need to await its resolution
+            return await result[0].result;
         }
         
         return null;
@@ -384,90 +385,288 @@ function parseLocationData() {
         const placeIdMatch = window.location.href.match(/place\/([^\/]+)/);
         const placeId = placeIdMatch ? placeIdMatch[1] : '';
 
-        // Extract address components and clean up all special characters
-        const addressElement = mainElement.querySelector('button[data-item-id^="address"]');
-        let fullAddress = '';
-        if (addressElement) {
-            fullAddress = addressElement.textContent
-                .trim()
-                .replace(/^[^\w\d]*/, '')
-                .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
-                .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
+        // Function to extract about section
+        function extractAboutSection() {
+            return new Promise((resolve) => {
+                // Click the About tab if it exists
+                const aboutTab = Array.from(document.querySelectorAll('button[role="tab"]'))
+                    .find(tab => tab.textContent.includes('About'));
+                
+                if (aboutTab) {
+                    aboutTab.click();
+                    // Wait for the about section to load
+                    setTimeout(() => {
+                        const aboutSection = document.querySelector('div[role="region"][aria-label*="About"]');
+                        if (aboutSection) {
+                            // Extract all text content from the about section
+                            const aboutText = [];
+                            
+                            // Get the main description
+                            const description = aboutSection.querySelector('.HlvSq');
+                            if (description) {
+                                aboutText.push(description.textContent.trim());
+                            }
+                            
+                            // Get amenities from WKLD0c container
+                            const amenitiesContainer = aboutSection.querySelector('.WKLD0c');
+                            if (amenitiesContainer) {
+                                const amenities = Array.from(amenitiesContainer.querySelectorAll('.CK16pd'))
+                                    .map(item => {
+                                        const label = item.getAttribute('aria-label');
+                                        if (label) {
+                                            // Convert "X available/unavailable" to "X: Yes/No"
+                                            const [amenity, status] = label.split(' ');
+                                            return `${amenity}: ${status === 'available' ? 'Yes' : 'No'}`;
+                                        }
+                                        return null;
+                                    })
+                                    .filter(item => item); // Remove null values
+                                
+                                if (amenities.length > 0) {
+                                    aboutText.push('Amenities:');
+                                    aboutText.push(amenities.join(', '));
+                                }
+                            }
+                            
+                            // Get all other sections
+                            const sections = aboutSection.querySelectorAll('.iP2t7d');
+                            sections.forEach(section => {
+                                const title = section.querySelector('.iL3Qke');
+                                const items = Array.from(section.querySelectorAll('.iNvpkb span[aria-label]'))
+                                    .map(item => item.getAttribute('aria-label'));
+                                
+                                if (title && items.length > 0) {
+                                    aboutText.push(`${title.textContent}:`);
+                                    aboutText.push(items.join(', '));
+                                }
+                            });
+                            
+                            // Click back to Overview tab
+                            const overviewTab = Array.from(document.querySelectorAll('button[role="tab"]'))
+                                .find(tab => tab.textContent.includes('Overview'));
+                            if (overviewTab) {
+                                overviewTab.click();
+                                setTimeout(() => {
+                                    resolve(aboutText.join('\n'));
+                                }, 1000);
+                            } else {
+                                resolve(aboutText.join('\n'));
+                            }
+                        } else {
+                            // If no about section found, try to get amenities from overview
+                            const overviewAmenities = document.querySelector('.WKLD0c');
+                            if (overviewAmenities) {
+                                const amenities = Array.from(overviewAmenities.querySelectorAll('.CK16pd'))
+                                    .map(item => {
+                                        const label = item.getAttribute('aria-label');
+                                        if (label) {
+                                            const [amenity, status] = label.split(' ');
+                                            return `${amenity}: ${status === 'available' ? 'Yes' : 'No'}`;
+                                        }
+                                        return null;
+                                    })
+                                    .filter(item => item);
+                                
+                                if (amenities.length > 0) {
+                                    resolve('Amenities:\n' + amenities.join(', '));
+                                } else {
+                                    resolve('');
+                                }
+                            } else {
+                                resolve('');
+                            }
+                        }
+                    }, 1000);
+                } else {
+                    // If no About tab, try to get amenities from overview
+                    const overviewAmenities = document.querySelector('.WKLD0c');
+                    if (overviewAmenities) {
+                        const amenities = Array.from(overviewAmenities.querySelectorAll('.CK16pd'))
+                            .map(item => {
+                                const label = item.getAttribute('aria-label');
+                                if (label) {
+                                    const [amenity, status] = label.split(' ');
+                                    return `${amenity}: ${status === 'available' ? 'Yes' : 'No'}`;
+                                }
+                                return null;
+                            })
+                            .filter(item => item);
+                        
+                        if (amenities.length > 0) {
+                            resolve('Amenities:\n' + amenities.join(', '));
+                        } else {
+                            resolve('');
+                        }
+                    } else {
+                        resolve('');
+                    }
+                }
+            });
         }
-        
-        // Extract business type
-        const businessTypeElement = mainElement.querySelector('button[jsaction*="pane.rating.category"]');
-        const businessType = businessTypeElement ? businessTypeElement.textContent.trim() : '';
 
-        // Enhanced phone number extraction
-        let phone = '';
-        const phoneElement = mainElement.querySelector('button[data-item-id^="phone:tel"]');
-        if (phoneElement) {
-            phone = phoneElement.textContent
-                .trim()
-                .replace(/^[^\w\d+]*/, '')
-                .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
-                .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
+        // Function to collect image URLs
+        function collectImageUrls() {
+            console.log('Collecting image URLs...');
+            const imageUrls = [];
+            const photoElements = document.querySelectorAll('.m6QErb.XiKgde a.OKAoZd');
+            console.log(`Found ${photoElements.length} photo elements`);
+            
+            photoElements.forEach(photoElement => {
+                const backgroundDiv = photoElement.querySelector('.U39Pmb');
+                if (backgroundDiv) {
+                    const style = backgroundDiv.style.backgroundImage;
+                    if (style) {
+                        const urlMatch = style.match(/url\("([^"]+)"\)/);
+                        if (urlMatch && urlMatch[1] && !urlMatch[1].includes('//:0')) {
+                            // Get the highest quality version by removing size parameters
+                            const highQualityUrl = urlMatch[1].replace(/=w\d+-h\d+-k-no/, '=s2048-k-no');
+                            imageUrls.push(highQualityUrl);
+                            console.log('Added image URL:', highQualityUrl);
+                        }
+                    }
+                }
+            });
+            return imageUrls;
         }
 
-        // Enhanced website extraction
-        let website = '';
-        const websiteElement = mainElement.querySelector('a[data-item-id="authority"], button[data-item-id="authority"]');
-        if (websiteElement) {
-            const href = websiteElement.href || websiteElement.getAttribute('data-url') || websiteElement.textContent.trim();
-            try {
-                website = href.startsWith('http') ? href : `http://${href}`;
-                new URL(website); // Validate the URL
-            } catch {
-                website = '';
+        // Function to wait for images to load
+        function waitForImages(maxAttempts = 10) {
+            return new Promise((resolve) => {
+                let attempts = 0;
+                
+                function checkImages() {
+                    attempts++;
+                    const imageUrls = collectImageUrls();
+                    console.log(`Attempt ${attempts}: Found ${imageUrls.length} images`);
+                    
+                    if (imageUrls.length > 0 || attempts >= maxAttempts) {
+                        resolve(imageUrls);
+                    } else {
+                        setTimeout(checkImages, 1000); // Check every second
+                    }
+                }
+                
+                checkImages();
+            });
+        }
+
+        // Return a promise that resolves with the location data
+        return new Promise(async (resolve) => {
+            // First extract the about section
+            const aboutText = await extractAboutSection();
+            
+            // Ensure we're back on the overview tab for images
+            const overviewTab = Array.from(document.querySelectorAll('button[role="tab"]'))
+                .find(tab => tab.textContent.includes('Overview'));
+            if (overviewTab) {
+                overviewTab.click();
+                // Wait a bit for the overview to load
+                await new Promise(r => setTimeout(r, 1000));
             }
-        }
-
-        // Extract rating information
-        const ratingElement = mainElement.querySelector('div[role="img"][aria-label*="stars"], span[aria-label*="stars"]');
-        const rating = ratingElement ? parseFloat(ratingElement.getAttribute('aria-label')) : null;
-
-        // Extract coordinates from URL
-        const coordsMatch = window.location.href.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
-        const lat = coordsMatch ? parseFloat(coordsMatch[1]) : null;
-        const lon = coordsMatch ? parseFloat(coordsMatch[2]) : null;
-
-        // Extract amenity details
-        const details = [];
-        const amenityElements = mainElement.querySelectorAll('.WKLD0c .CK16pd, div[aria-label*="Amenities"]');
-        amenityElements.forEach(element => {
-            const ariaLabel = element.getAttribute('aria-label');
-            if (ariaLabel) {
-                const amenityName = ariaLabel.replace(/ (available|unavailable)$/, '').trim();
-                details.push(amenityName);
+            
+            // Then handle photos
+            const seePhotosButton = mainElement.querySelector('button.Dx2nRe');
+            if (seePhotosButton) {
+                seePhotosButton.click();
+                setTimeout(async () => {
+                    const imageUrls = await waitForImages();
+                    finishCollection(imageUrls, aboutText);
+                }, 2000); // Increased delay to ensure photo gallery loads
             } else {
-                const text = element.textContent.trim();
-                if (text) details.push(text);
+                const imageUrls = await waitForImages();
+                finishCollection(imageUrls, aboutText);
+            }
+
+            function finishCollection(imageUrls, aboutText) {
+                // Extract address components and clean up all special characters
+                const addressElement = mainElement.querySelector('button[data-item-id^="address"]');
+                let fullAddress = '';
+                if (addressElement) {
+                    fullAddress = addressElement.textContent
+                        .trim()
+                        .replace(/^[^\w\d]*/, '')
+                        .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+                        .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                }
+                
+                // Extract business type
+                const businessTypeElement = mainElement.querySelector('button[jsaction*="pane.rating.category"]');
+                const businessType = businessTypeElement ? businessTypeElement.textContent.trim() : '';
+
+                // Enhanced phone number extraction
+                let phone = '';
+                const phoneElement = mainElement.querySelector('button[data-item-id^="phone:tel"]');
+                if (phoneElement) {
+                    phone = phoneElement.textContent
+                        .trim()
+                        .replace(/^[^\w\d+]*/, '')
+                        .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+                        .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                }
+
+                // Enhanced website extraction
+                let website = '';
+                const websiteElement = mainElement.querySelector('a[data-item-id="authority"], button[data-item-id="authority"]');
+                if (websiteElement) {
+                    const href = websiteElement.href || websiteElement.getAttribute('data-url') || websiteElement.textContent.trim();
+                    try {
+                        website = href.startsWith('http') ? href : `http://${href}`;
+                        new URL(website); // Validate the URL
+                    } catch {
+                        website = '';
+                    }
+                }
+
+                // Extract rating information
+                const ratingElement = mainElement.querySelector('div[role="img"][aria-label*="stars"], span[aria-label*="stars"]');
+                const rating = ratingElement ? parseFloat(ratingElement.getAttribute('aria-label')) : null;
+
+                // Extract coordinates from URL
+                const coordsMatch = window.location.href.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+                const lat = coordsMatch ? parseFloat(coordsMatch[1]) : null;
+                const lon = coordsMatch ? parseFloat(coordsMatch[2]) : null;
+
+                // Extract amenity details
+                const details = [];
+                const amenityElements = mainElement.querySelectorAll('.WKLD0c .CK16pd, div[aria-label*="Amenities"]');
+                amenityElements.forEach(element => {
+                    const ariaLabel = element.getAttribute('aria-label');
+                    if (ariaLabel) {
+                        const amenityName = ariaLabel.replace(/ (available|unavailable)$/, '').trim();
+                        details.push(amenityName);
+                    } else {
+                        const text = element.textContent.trim();
+                        if (text) details.push(text);
+                    }
+                });
+
+                const result = {
+                    name,
+                    placeId,
+                    address: fullAddress,
+                    businessType,
+                    phone,
+                    website,
+                    rating,
+                    lat,
+                    lon,
+                    details: details.join(', '),
+                    about: aboutText,
+                    url: window.location.href,
+                    imageUrls: imageUrls
+                };
+
+                console.log('Parsed location data:', result);
+                resolve(result);
             }
         });
-
-        const result = {
-            name,
-            placeId,
-            address: fullAddress,
-            phone,
-            website,
-            rating,
-            lat,
-            lon,
-            details: details.join(', '),
-            url: window.location.href
-        };
-
-        console.log('Parsed location data:', result);
-        return result;
     } catch (error) {
         console.error('Error parsing location data:', error);
-        return null;
+        return Promise.resolve(null);
     }
 }
 
