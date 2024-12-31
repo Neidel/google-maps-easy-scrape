@@ -317,6 +317,7 @@ function initializeTableHeaders() {
             <th class="maps-col">Maps URL</th>
             <th class="details-col">Details</th>
             <th class="about-col">About</th>
+            <th class="summary-col">Summary</th>
             <th class="images-col">Images</th>
         </tr>
     `;
@@ -367,6 +368,7 @@ function updateTableRow(url, data) {
         </td>
         <td class="details-col">${data.details ? 'Extracted' : ''}</td>
         <td class="about-col">${data.about ? 'Extracted' : ''}</td>
+        <td class="summary-col">${data.summary ? 'Extracted' : ''}</td>
         <td class="images-col">${data.imageUrls ? data.imageUrls.length : '0'}</td>
     `;
 }
@@ -446,6 +448,7 @@ function downloadCsv() {
         'Maps URL',
         'Details',
         'About',
+        'Summary',
         // Add numbered columns for each possible image
         ...Array(maxImages).fill(0).map((_, i) => `Image ${i + 1}`)
     ];
@@ -470,6 +473,7 @@ function downloadCsv() {
             data.url || '',
             data.details || '',
             data.about || '',
+            data.summary || '',
             // Spread the image URLs into separate columns, padding with empty strings if needed
             ...imageUrls,
             ...Array(maxImages - imageUrls.length).fill('')

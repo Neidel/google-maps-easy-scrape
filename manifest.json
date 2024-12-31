@@ -11,12 +11,17 @@
         "storage"
     ],
     "host_permissions": [
-        "*://*.google.com/*"
+        "*://*.google.com/*",
+        "*://*.openai.com/*"
     ],
     "background": {
         "service_worker": "background.js",
         "type": "module"
     },
+    "web_accessible_resources": [{
+        "resources": ["openai.js", "config.js"],
+        "matches": ["<all_urls>"]
+    }],
     "action": {
         "default_popup": "popup.html"
     },
