@@ -313,7 +313,8 @@ function initializeTableHeaders() {
             <th class="rating-col">Rating</th>
             <th class="lat-col">Latitude</th>
             <th class="lon-col">Longitude</th>
-            <th class="website-col">Website</th>
+            <th class="park-url-col">Park URL</th>
+            <th class="phone-col">Phone</th>
             <th class="maps-col">Maps URL</th>
             <th class="details-col">Details</th>
             <th class="about-col">About</th>
@@ -360,9 +361,10 @@ function updateTableRow(url, data) {
         <td class="rating-col">${data.rating || ''}</td>
         <td class="lat-col">${data.lat || ''}</td>
         <td class="lon-col">${data.lon || ''}</td>
-        <td class="website-col">
-            ${data.website ? `<a href="${data.website}" target="_blank" class="url-link">[View]</a>` : ''}
+        <td class="park-url-col">
+            ${data.parkUrl ? `<a href="${data.parkUrl}" target="_blank" class="url-link">[View]</a>` : ''}
         </td>
+        <td class="phone-col">${data.phone || ''}</td>
         <td class="maps-col">
             <a href="${url}" target="_blank" class="url-link">[View]</a>
         </td>
@@ -428,13 +430,10 @@ function parseAddress(fullAddress) {
 
 // Function to download CSV
 function downloadCsv() {
-    // Find the maximum number of images across all entries
-    const maxImages = Math.max(...Array.from(AppState.processedData.values())
-        .map(data => (data.imageUrls || []).length));
-
     const headers = [
         'Name',
-        'Business Type',
+        'Park URL',
+        'Phone',
         'Street Address',
         'City',
         'State/Province',
@@ -444,22 +443,26 @@ function downloadCsv() {
         'Latitude',
         'Longitude',
         'Place ID',
-        'Website URL',
         'Maps URL',
         'Details',
         'About',
         'Summary',
-        // Add numbered columns for each possible image
-        ...Array(maxImages).fill(0).map((_, i) => `Image ${i + 1}`)
+        'post_images' // Single column for all images
     ];
 
     const rows = Array.from(AppState.processedData.values()).map(data => {
         const addressParts = parseAddress(data.address || '');
         const imageUrls = data.imageUrls || [];
         
+        // Format images in the required format: URL|ID|TITLE|DESCRIPTION::
+        const formattedImages = imageUrls
+            .map(url => `${url}|||`) // Empty ID, TITLE, and DESCRIPTION
+            .join('::');
+        
         return [
             data.name || '',
-            data.businessType || '',
+            data.parkUrl || '',
+            data.phone || '',
             addressParts.street || '',
             addressParts.city || '',
             addressParts.state || '',
@@ -469,14 +472,11 @@ function downloadCsv() {
             data.lat || '',
             data.lon || '',
             data.placeId || '',
-            data.website || '',
             data.url || '',
             data.details || '',
             data.about || '',
             data.summary || '',
-            // Spread the image URLs into separate columns, padding with empty strings if needed
-            ...imageUrls,
-            ...Array(maxImages - imageUrls.length).fill('')
+            formattedImages // All images in a single column
         ];
     });
 

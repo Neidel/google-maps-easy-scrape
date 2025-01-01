@@ -507,6 +507,31 @@ function parseLocationData() {
         const placeIdMatch = window.location.href.match(/place\/([^\/]+)/);
         const placeId = placeIdMatch ? placeIdMatch[1] : '';
 
+        // Extract park URL (looking for the first website link)
+        let parkUrl = '';
+        const parkUrlElement = mainElement.querySelector('a[data-item-id="authority"]');
+        if (parkUrlElement) {
+            parkUrl = parkUrlElement.href || parkUrlElement.getAttribute('data-url') || '';
+            try {
+                new URL(parkUrl); // Validate URL
+            } catch {
+                parkUrl = '';
+            }
+        }
+
+        // Extract phone number
+        let phone = '';
+        const phoneElement = mainElement.querySelector('button[data-item-id^="phone:tel"]');
+        if (phoneElement) {
+            phone = phoneElement.textContent
+                .trim()
+                .replace(/^[^\w\d+]*/, '')
+                .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+                .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
         // Function to extract about section
         function extractAboutSection() {
             return new Promise((resolve) => {
@@ -713,36 +738,6 @@ function parseLocationData() {
                         .trim();
                 }
 
-                // Extract business type
-                const businessTypeElement = mainElement.querySelector('button[jsaction*="pane.rating.category"]');
-                const businessType = businessTypeElement ? businessTypeElement.textContent.trim() : '';
-
-                // Enhanced phone number extraction
-                let phone = '';
-                const phoneElement = mainElement.querySelector('button[data-item-id^="phone:tel"]');
-                if (phoneElement) {
-                    phone = phoneElement.textContent
-                        .trim()
-                        .replace(/^[^\w\d+]*/, '')
-                        .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
-                        .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
-                        .replace(/\s+/g, ' ')
-                        .trim();
-                }
-
-                // Enhanced website extraction
-                let website = '';
-                const websiteElement = mainElement.querySelector('a[data-item-id="authority"], button[data-item-id="authority"]');
-                if (websiteElement) {
-                    const href = websiteElement.href || websiteElement.getAttribute('data-url') || websiteElement.textContent.trim();
-                    try {
-                        website = href.startsWith('http') ? href : `http://${href}`;
-                        new URL(website); // Validate the URL
-                    } catch {
-                        website = '';
-                    }
-                }
-
                 // Extract rating information
                 const ratingElement = mainElement.querySelector('div[role="img"][aria-label*="stars"], span[aria-label*="stars"]');
                 const rating = ratingElement ? parseFloat(ratingElement.getAttribute('aria-label')) : null;
@@ -770,9 +765,8 @@ function parseLocationData() {
                     name,
                     placeId,
                     address: fullAddress,
-                    businessType,
+                    parkUrl,
                     phone,
-                    website,
                     rating,
                     lat,
                     lon,
