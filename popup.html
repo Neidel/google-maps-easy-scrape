@@ -317,6 +317,12 @@
     .settings-group input {
       flex: 1;
     }
+    .scan-progress {
+      display: inline-block;
+      margin-left: 15px;
+      font-size: 12px;
+      color: #666;
+    }
   </style>  
 </head>
 <body>
@@ -327,9 +333,13 @@
   
   <div class="main-controls">
     <div class="left-controls">
+      <button id="gridScanButton" class="button" title="Start Grid Scan">
+        <i class="fas fa-th"></i>
+      </button>
       <button id="collectButton" class="button" disabled title="Collect URLs">
         <i class="fas fa-search"></i>
       </button>
+      <div id="scanProgress" class="scan-progress">Ready to scan</div>
     </div>
     <div class="right-controls">
       <button id="clearButton" class="button" disabled title="Clear List">
@@ -387,6 +397,8 @@
     </div>
   </div>
 
-  <script src="popup.js"></script>
+  <!-- Load modules in correct order -->
+  <script src="wordpress.js" type="module"></script>
+  <script src="popup.js" type="module"></script>
 </body>
 </html>

@@ -12,7 +12,8 @@
     ],
     "host_permissions": [
         "*://*.google.com/*",
-        "*://*.openai.com/*"
+        "*://*.openai.com/*",
+        "*://*.thedev.ca/*"
     ],
     "background": {
         "service_worker": "background.js",
@@ -28,6 +29,9 @@
     "icons": {
         "48": "map.png",
         "128": "map.png"
+    },
+    "content_security_policy": {
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
     }
 }
   
