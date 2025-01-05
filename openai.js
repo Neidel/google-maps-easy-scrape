@@ -1,5 +1,78 @@
 import config from './config.js';
 
+export async function parseAddressWithAI(fullAddress) {
+    if (!fullAddress) {
+        console.log('No address provided for parsing');
+        return null;
+    }
+    
+    if (!config.OPENAI_API_KEY) {
+        console.error('OpenAI API key not configured');
+        return null;
+    }
+
+    try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.OPENAI_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: config.OPENAI_MODEL,
+                messages: [
+                    {
+                        role: "system",
+                        content: `You are an address parsing assistant. Given an address string, return ONLY a JSON object with the following fields:
+{
+    "street": "",
+    "city": "",
+    "state": "", // Province code (e.g., SK, BC, ON)
+    "postalCode": "", // In format A1A 1A1
+    "country": "Canada" // Always Canada
+}
+Do not include any other text in your response, only the JSON object.`
+                    },
+                    {
+                        role: "user",
+                        content: fullAddress
+                    }
+                ],
+                temperature: 0.1 // Low temperature for consistent formatting
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`OpenAI API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!data.choices?.[0]?.message?.content) {
+            throw new Error('Invalid response format from OpenAI API');
+        }
+
+        // Parse the JSON response
+        const addressParts = JSON.parse(data.choices[0].message.content);
+        
+        // Ensure proper formatting
+        if (addressParts.state) {
+            addressParts.state = addressParts.state.toUpperCase();
+        }
+        if (addressParts.postalCode) {
+            addressParts.postalCode = addressParts.postalCode.toUpperCase();
+        }
+        if (addressParts.country) {
+            addressParts.country = "Canada";
+        }
+
+        return addressParts;
+
+    } catch (error) {
+        console.error('Error parsing address with OpenAI:', error);
+        return null;
+    }
+}
+
 export async function processAboutText(locationData) {
     if (!locationData) {
         console.log('No location data provided for processing');

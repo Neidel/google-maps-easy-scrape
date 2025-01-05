@@ -135,6 +135,8 @@ export const Logger = {
 // Import WordPress uploader
 import WordPressImageUploader from './wordpress.js';
 
+import { processAboutText, parseAddressWithAI } from './openai.js';
+
 // Grid Scanning Functions
 async function startGridScan() {
     console.log('Starting grid scan');
@@ -748,12 +750,12 @@ function updateTable(urls) {
 }
 
 // Function to update table row with data
-function updateTableRow(url, data) {
+async function updateTableRow(url, data) {
     const row = resultsTable.querySelector(`tr[data-url="${url}"]`);
     if (!row) return;
 
     // Split address into components
-    const addressParts = parseAddress(data.address || '');
+    const addressParts = await parseAddress(data.address || '');
 
     // Count uploaded images
     const uploadedImagesCount = data.uploadedImages ? data.uploadedImages.split('::').length : 0;
@@ -784,7 +786,14 @@ function updateTableRow(url, data) {
 }
 
 // Function to parse address into components
-function parseAddress(fullAddress) {
+async function parseAddress(fullAddress) {
+    // Try AI parsing first
+    const aiParsed = await parseAddressWithAI(fullAddress);
+    if (aiParsed) {
+        return aiParsed;
+    }
+
+    // Fallback to regex parsing if AI fails
     const parts = {
         street: '',
         city: '',
@@ -795,43 +804,88 @@ function parseAddress(fullAddress) {
 
     if (!fullAddress) return parts;
 
-    // Split address by commas
+    // Split address by commas and clean each part
     const components = fullAddress.split(',').map(part => part.trim());
 
+    // Handle Canadian address format
     if (components.length >= 1) {
+        // First component is always street
         parts.street = components[0];
     }
     
     if (components.length >= 2) {
+        // Second component is typically the city
         parts.city = components[1];
     }
     
     if (components.length >= 3) {
-        // Check for Canadian postal code format (A1A 1A1) or US format (12345 or 12345-1234)
-        const statePostalMatch = components[2].match(/([A-Z]{2})\s*((?:[A-Z]\d[A-Z]\s*\d[A-Z]\d)|(?:\d{5}(?:-\d{4})?))/) ||
-                                components[2].match(/([A-Z]{2})\s*([A-Z]\d[A-Z]\s*\d[A-Z]\d)/);
-        if (statePostalMatch) {
-            parts.state = statePostalMatch[1];
-            parts.postalCode = statePostalMatch[2].replace(/\s+/g, ' ').trim();
+        // Third component usually contains province and postal code
+        const thirdPart = components[2].trim();
+        
+        // Try different postal code formats
+        // Format 1: "SK S7K 3N2"
+        const combinedMatch = thirdPart.match(/([A-Z]{2})\s+([A-Z]\d[A-Z]\s*\d[A-Z]\d)/i);
+        // Format 2: "SK"
+        const stateOnlyMatch = thirdPart.match(/^[A-Z]{2}$/i);
+        // Format 3: "S7K 3N2"
+        const postalOnlyMatch = thirdPart.match(/^[A-Z]\d[A-Z]\s*\d[A-Z]\d$/i);
+        
+        if (combinedMatch) {
+            // Both province and postal code in same part
+            parts.state = combinedMatch[1].toUpperCase();
+            parts.postalCode = combinedMatch[2].replace(/\s+/g, ' ').trim().toUpperCase();
+        } else if (stateOnlyMatch) {
+            // Just province code
+            parts.state = thirdPart.toUpperCase();
+        } else if (postalOnlyMatch) {
+            // Just postal code
+            parts.postalCode = thirdPart.replace(/\s+/g, ' ').trim().toUpperCase();
         } else {
-            parts.state = components[2];
+            // Try to extract any province code
+            const stateMatch = thirdPart.match(/[A-Z]{2}/i);
+            if (stateMatch) {
+                parts.state = stateMatch[0].toUpperCase();
+            }
+            // Try to extract any postal code
+            const postalMatch = thirdPart.match(/[A-Z]\d[A-Z]\s*\d[A-Z]\d/i);
+            if (postalMatch) {
+                parts.postalCode = postalMatch[0].replace(/\s+/g, ' ').trim().toUpperCase();
+            }
         }
     }
     
     if (components.length >= 4) {
-        // If postal code wasn't in state component, check the next component
-        if (!parts.postalCode) {
-            const postalMatch = components[3].match(/(?:[A-Z]\d[A-Z]\s*\d[A-Z]\d)|(?:\d{5}(?:-\d{4})?)/);
-            if (postalMatch) {
-                parts.postalCode = postalMatch[0].replace(/\s+/g, ' ').trim();
-                parts.country = components[3].replace(postalMatch[0], '').trim();
+        const fourthPart = components[3].trim().toUpperCase();
+        if (fourthPart === 'CANADA') {
+            parts.country = 'Canada';
             } else {
-                parts.country = components[3];
-            }
+            // Check if fourth part contains a postal code
+            const postalMatch = fourthPart.match(/([A-Z]\d[A-Z]\s*\d[A-Z]\d)/i);
+            if (postalMatch && !parts.postalCode) {
+                parts.postalCode = postalMatch[0].replace(/\s+/g, ' ').trim().toUpperCase();
+                // Rest is country
+                parts.country = fourthPart.replace(postalMatch[0], '').trim();
         } else {
-            parts.country = components[3];
+                parts.country = fourthPart;
+            }
         }
     }
+
+    // Default country to Canada if not specified
+    if (!parts.country && parts.state) {
+        parts.country = 'Canada';
+    }
+
+    // Clean up any remaining whitespace and standardize case
+    Object.keys(parts).forEach(key => {
+        if (parts[key]) {
+            parts[key] = parts[key].replace(/\s+/g, ' ').trim();
+            // Proper case for country
+            if (key === 'country' && parts[key].toUpperCase() === 'CANADA') {
+                parts[key] = 'Canada';
+        }
+    }
+    });
 
     return parts;
 }
@@ -985,8 +1039,8 @@ async function downloadCsv() {
         const totalEntries = AppState.processedData.size;
         Logger.info(`Processing ${totalEntries} entries for CSV generation`);
 
-        const rows = Array.from(AppState.processedData.values()).map(data => {
-            const addressParts = parseAddress(data.address || '');
+        const rows = await Promise.all(Array.from(AppState.processedData.values()).map(async data => {
+            const addressParts = await parseAddress(data.address || '');
             
             return [
                 data.name || '',
@@ -1007,7 +1061,7 @@ async function downloadCsv() {
                 data.summary || '',
                 data.uploadedImages || '' // Use the already uploaded images
             ];
-        });
+        }));
 
         Logger.info('Generating CSV content');
         const csvContent = [
