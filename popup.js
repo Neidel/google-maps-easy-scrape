@@ -55,6 +55,17 @@ const CSV_HEADERS = [
     'post_images' // Single column for all images
 ];
 
+// Import WordPress uploader and other modules
+import WordPressImageUploader from './wordpress.js';
+import { processAboutText, parseAddressWithAI } from './openai.js';
+import { 
+    initializeFromStorage,
+    saveToStorage,
+    checkUrlInStorage,
+    clearAllStorage,
+    getStoredPlacesForExport
+} from './storage-integration.js';
+
 // State management
 const AppState = {
     collectedUrls: [],
@@ -63,8 +74,8 @@ const AppState = {
     isProcessing: false,
     currentUrl: null,
     stallTimeout: null,
-    processingHistory: new Set(), // Track URLs that have been processed
-    retryCount: new Map(), // Track retry counts per URL
+    processingHistory: new Set(),
+    retryCount: new Map(),
     MAX_RETRIES: 3,
     gridScanState: {
         isScanning: false,
@@ -72,8 +83,8 @@ const AppState = {
         currentLon: null,
         currentRegionIndex: 0,
         zoom: 8.69,
-        lonStep: 6.28,    // Calculated from example
-        latStep: 5.0,     // Adjustable based on testing
+        lonStep: 6.28,
+        latStep: 5.0,
         urlsCollected: 0,
         processedLocations: new Set(),
         uniqueUrls: new Set(),
@@ -131,11 +142,6 @@ export const Logger = {
         return this.log(this.levels.SUCCESS, message, data);
     }
 };
-
-// Import WordPress uploader
-import WordPressImageUploader from './wordpress.js';
-
-import { processAboutText, parseAddressWithAI } from './openai.js';
 
 // Grid Scanning Functions
 async function startGridScan() {
@@ -322,7 +328,7 @@ let resultsTable;
 let collectButton, processButton, clearButton, downloadCsvButton;
 
 // State management functions
-function resetState() {
+async function resetState() {
     AppState.collectedUrls = [];
     AppState.processedData.clear();
     AppState.urlToPlaceId.clear();
@@ -341,6 +347,9 @@ function resetState() {
     AppState.gridScanState.urlsCollected = 0;
     AppState.gridScanState.processedLocations.clear();
     AppState.gridScanState.uniqueUrls.clear();
+    
+    // Clear storage
+    StorageManager.clearStorage();
     
     const progressElement = document.getElementById('scanProgress');
     if (progressElement) {
@@ -368,7 +377,7 @@ function getSerializableState() {
     };
 }
 
-function markUrlAsProcessed(url, data) {
+async function markUrlAsProcessed(url, data) {
     if (!url || !data) return false;
     
     const placeId = data.placeId;
@@ -377,12 +386,21 @@ function markUrlAsProcessed(url, data) {
     AppState.processedData.set(placeId, data);
     AppState.urlToPlaceId.set(url, placeId);
     AppState.processingHistory.add(url);
+    
+    await saveToStorage(url, data);
+    
+    // Enable download button since we have data
+    if (downloadCsvButton) {
+        downloadCsvButton.disabled = false;
+    }
+    
     return true;
 }
 
-function isUrlProcessed(url) {
+async function isUrlProcessed(url) {
     return AppState.processingHistory.has(url) || 
-           Array.from(AppState.urlToPlaceId.keys()).includes(url);
+           Array.from(AppState.urlToPlaceId.keys()).includes(url) ||
+           await checkUrlInStorage(url);
 }
 
 function canRetryUrl(url) {
@@ -396,8 +414,8 @@ function incrementRetryCount(url) {
     return currentRetries + 1;
 }
 
-// Update processNextUrl to use new state management
-function processNextUrl() {
+// Update processNextUrl to use storage
+async function processNextUrl() {
     if (AppState.isProcessing) {
         console.log('Already processing a URL, skipping');
         return;
@@ -406,15 +424,19 @@ function processNextUrl() {
     clearStallTimeout();
 
     // Filter out processed URLs and those that have exceeded retry limits
-    const unprocessedUrls = AppState.collectedUrls.filter(url => {
-        if (isUrlProcessed(url)) return false;
-        if (!canRetryUrl(url)) {
+    const unprocessedUrls = [];
+    for (const url of AppState.collectedUrls) {
+        const processed = await isUrlProcessed(url);
+        if (!processed && canRetryUrl(url)) {
+            unprocessedUrls.push(url);
+        } else if (!processed) {
             console.log(`URL exceeded retry limit: ${url}`);
             updateRowStatus(url, 'error', 'Max retries exceeded');
-            return false;
+        } else {
+            console.log(`URL already processed: ${url}`);
+            updateRowStatus(url, 'completed');
         }
-        return true;
-    });
+    }
 
     console.log('Unprocessed URLs:', unprocessedUrls.length, unprocessedUrls);
 
@@ -427,7 +449,6 @@ function processNextUrl() {
         AppState.isProcessing = true;
         AppState.currentUrl = nextUrl;
         
-        // Send message with complete state
         chrome.runtime.sendMessage({
             type: 'process_url',
             url: nextUrl,
@@ -440,7 +461,12 @@ function processNextUrl() {
         AppState.isProcessing = false;
         AppState.currentUrl = null;
         chrome.runtime.sendMessage({ type: 'processing_complete' });
-        if (processButton) processButton.disabled = false;
+        processButton.disabled = true;  // Disable the process button when all URLs are processed
+        
+        // If we have processed data, enable the download button
+        if (AppState.processedData.size > 0 || await StorageManager.getStoredPlaces().length > 0) {
+            downloadCsvButton.disabled = false;
+        }
     }
 }
 
@@ -604,6 +630,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize table headers
     initializeTableHeaders();
 
+    // Load stored data and enable download if we have any data
+    const storedPlaces = await initializeFromStorage();
+    if (storedPlaces.length > 0) {
+        storedPlaces.forEach(data => {
+            if (data.placeId) {
+                AppState.processedData.set(data.placeId, data);
+                if (data.url) {
+                    AppState.urlToPlaceId.set(data.url, data.placeId);
+                    AppState.processingHistory.add(data.url);
+                }
+            }
+        });
+        downloadCsvButton.disabled = false;  // Enable download if we have stored data
+    }
+
     // Enable buttons
     collectButton.disabled = false;
     gridScanButton.disabled = false;
@@ -644,14 +685,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return;
             }
 
-            const urls = await collectUrlsFromPage();
-            if (urls && urls.length > 0) {
-                AppState.collectedUrls = urls;
-                updateTable(urls);
+            const entries = await collectUrlsFromPage();
+            if (entries && entries.length > 0) {
+                AppState.collectedUrls = entries.map(entry => entry.url);
+                updateTable(entries);
                 processButton.disabled = false;
                 clearButton.disabled = false;
             } else {
-                alert('No URLs found. Please try again or scroll through the search results.');
+                alert('No new URLs found. All visible locations have already been processed.');
                 collectButton.disabled = false;
             }
         } catch (error) {
@@ -661,24 +702,69 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    processButton.addEventListener('click', () => {
+    processButton.addEventListener('click', async () => {
+        const hasUnprocessedUrls = await checkForUnprocessedUrls();
+        if (!hasUnprocessedUrls) {
+            console.log('No unprocessed URLs found');
+            processButton.disabled = true;
+            alert('No URLs available for processing. Please collect URLs first.');
+            return;
+        }
+        
         processButton.disabled = true;
         processNextUrl();
     });
 
-    clearButton.addEventListener('click', () => {
-        resetState();
-        clearTable();
-        chrome.runtime.sendMessage({ type: 'clear_captured_data' });
-        processButton.disabled = true;
-        clearButton.disabled = true;
-        downloadCsvButton.disabled = true;
-        collectButton.disabled = false;
-        gridScanButton.disabled = false; // Re-enable grid scan button after clearing
+    clearButton.addEventListener('click', async () => {
+        if (confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+            await clearAllStorage();
+            resetState();
+            clearTable();
+            chrome.runtime.sendMessage({ type: 'clear_captured_data' });
+            processButton.disabled = true;
+            clearButton.disabled = true;
+            downloadCsvButton.disabled = true;  // Disable download when clearing all data
+            collectButton.disabled = false;
+            gridScanButton.disabled = false;
+        }
     });
 
-    downloadCsvButton.addEventListener('click', () => {
+    downloadCsvButton.addEventListener('click', async () => {
+        const storedPlaces = await getStoredPlacesForExport();
+        if (storedPlaces.length === 0) {
+            alert('No data available for export. Please collect and process some locations first.');
+            return;
+        }
         downloadCsv();
+    });
+
+    const clearMemoryButton = document.getElementById('clearMemoryButton');
+    
+    clearMemoryButton.addEventListener('click', async () => {
+        if (confirm('Are you sure you want to clear all stored data from memory? This will remove all previously collected data but keep the current list.')) {
+            await clearAllStorage();
+            AppState.processedData.clear();
+            AppState.urlToPlaceId.clear();
+            AppState.processingHistory.clear();
+            Logger.success('Memory cleared successfully');
+            
+            // Update UI to reflect cleared memory
+            const rows = resultsTable.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const statusCell = row.querySelector('.status-col');
+                if (statusCell && statusCell.textContent === 'Completed') {
+                    statusCell.textContent = 'Pending';
+                }
+            });
+            
+            // Enable process button if there are URLs in the list
+            if (AppState.collectedUrls.length > 0) {
+                processButton.disabled = false;
+            }
+            
+            // Disable download button since memory is cleared
+            downloadCsvButton.disabled = true;
+        }
     });
 });
 
@@ -691,14 +777,45 @@ async function collectUrlsFromPage() {
         const result = await chrome.scripting.executeScript({
             target: { tabId: tab.id },
             func: () => {
+                const entries = [];
                 const links = Array.from(document.querySelectorAll('a[href*="maps/place"]'));
-                return links.map(link => link.href)
-                    .filter(url => url.includes('/maps/place/'))
-                    .filter((url, index, self) => self.indexOf(url) === index);
+                links.forEach(link => {
+                    const url = link.href;
+                    if (url.includes('/maps/place/')) {
+                        // Get name from aria-label, removing " · Visited link" if present
+                        let name = link.getAttribute('aria-label') || '';
+                        name = name.replace(/\s*·\s*Visited link$/, '').trim();
+                        
+                        // If no aria-label, try to find name in heading elements
+                        if (!name) {
+                            const nameElement = link.querySelector('h3, h4, h5') || 
+                                             link.closest('[role="article"]')?.querySelector('h3, h4, h5');
+                            name = nameElement ? nameElement.textContent.trim() : '';
+                        }
+                        
+                        entries.push({ url, name });
+                    }
+                });
+                return entries.filter((entry, index, self) => 
+                    self.findIndex(e => e.url === entry.url) === index
+                );
             }
         });
 
-        return result[0]?.result || [];
+        const allEntries = result[0]?.result || [];
+        const newEntries = [];
+        
+        // Filter out already processed URLs
+        for (const entry of allEntries) {
+            const processed = await isUrlProcessed(entry.url);
+            if (!processed) {
+                newEntries.push(entry);
+            } else {
+                console.log(`Skipping already processed URL: ${entry.url}`);
+            }
+        }
+
+        return newEntries;
     } catch (error) {
         console.error('Error executing script:', error);
         return null;
@@ -732,19 +849,47 @@ function initializeTableHeaders() {
 }
 
 // Function to update table with URLs
-function updateTable(urls) {
+function updateTable(entries) {
     const tbody = resultsTable.querySelector('tbody');
     tbody.innerHTML = '';
 
-    urls.forEach(url => {
+    entries.forEach(entry => {
         const row = document.createElement('tr');
-        row.dataset.url = url;
+        row.dataset.url = entry.url;
         row.innerHTML = `
-            <td class="status-col">Pending</td>
-            <td colspan="7" class="url-cell">
-                <a href="${url}" target="_blank" class="url-link">[Page Link]</a>
+            <td class="status-col">
+                Pending
+                <button class="delete-row-btn" title="Remove from list">
+                    <i class="fas fa-times"></i>
+                </button>
+            </td>
+            <td class="name-col">${entry.name || 'Unknown'}</td>
+            <td colspan="6" class="url-cell">
+                <a href="${entry.url}" target="_blank" class="url-link">[Page Link]</a>
             </td>
         `;
+
+        // Add click handler for delete button
+        const deleteBtn = row.querySelector('.delete-row-btn');
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent event bubbling
+            const url = row.dataset.url;
+            
+            // Remove from AppState
+            AppState.collectedUrls = AppState.collectedUrls.filter(u => u !== url);
+            
+            // Remove the row
+            row.remove();
+            
+            // Update button states
+            if (AppState.collectedUrls.length === 0) {
+                processButton.disabled = true;
+                clearButton.disabled = true;
+            }
+            
+            Logger.info('Removed URL from list:', url);
+        });
+
         tbody.appendChild(row);
     });
 }
@@ -1029,19 +1174,17 @@ async function downloadCsv() {
     const startTime = Date.now();
     Logger.info('Starting CSV download process');
     
-    // Show loading state
     const downloadButton = document.getElementById('downloadCsvButton');
     const originalIcon = downloadButton.innerHTML;
     downloadButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     downloadButton.disabled = true;
 
     try {
-        const totalEntries = AppState.processedData.size;
-        Logger.info(`Processing ${totalEntries} entries for CSV generation`);
+        const storedPlaces = await getStoredPlacesForExport();
+        Logger.info(`Processing ${storedPlaces.length} entries for CSV generation`);
 
-        const rows = await Promise.all(Array.from(AppState.processedData.values()).map(async data => {
+        const rows = await Promise.all(storedPlaces.map(async data => {
             const addressParts = await parseAddress(data.address || '');
-            
             return [
                 data.name || '',
                 data.parkUrl || '',
@@ -1059,7 +1202,7 @@ async function downloadCsv() {
                 data.details || '',
                 data.about || '',
                 data.summary || '',
-                data.uploadedImages || '' // Use the already uploaded images
+                data.uploadedImages || ''
             ];
         }));
 
@@ -1101,7 +1244,7 @@ async function downloadCsv() {
         const duration = ((Date.now() - startTime) / 1000).toFixed(2);
         Logger.success(`Process completed successfully`, {
             duration: `${duration}s`,
-            entriesProcessed: totalEntries,
+            entriesProcessed: storedPlaces.length,
             csvSize: `${(blob.size / 1024).toFixed(2)}KB`
         });
 
@@ -1201,6 +1344,17 @@ function scrollResults() {
 
         scroll();
     });
+}
+
+// Helper function to check for unprocessed URLs
+async function checkForUnprocessedUrls() {
+    for (const url of AppState.collectedUrls) {
+        const processed = await isUrlProcessed(url);
+        if (!processed && canRetryUrl(url)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // ... rest of existing code ...
