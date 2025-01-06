@@ -437,25 +437,29 @@ async function processNextUrl() {
 
     // Filter out processed URLs and those that have exceeded retry limits
     const unprocessedUrls = [];
-    for (const url of AppState.collectedUrls) {
-        const processed = await isUrlProcessed(url);
-        if (!processed && canRetryUrl(url)) {
-            unprocessedUrls.push(url);
+    for (const urlData of AppState.collectedUrls) {
+        // Extract the actual URL string from the object if necessary
+        const urlString = typeof urlData === 'string' ? urlData : urlData.url;
+        
+        const processed = await isUrlProcessed(urlString);
+        if (!processed && canRetryUrl(urlString)) {
+            unprocessedUrls.push(urlData);
         } else if (!processed) {
-            console.log(`URL exceeded retry limit: ${url}`);
-            updateRowStatus(url, 'error', 'Max retries exceeded');
+            console.log(`URL exceeded retry limit: ${urlString}`);
+            updateRowStatus(urlString, 'error', 'Max retries exceeded');
         } else {
-            console.log(`URL already processed: ${url}`);
-            updateRowStatus(url, 'completed');
+            console.log(`URL already processed: ${urlString}`);
+            updateRowStatus(urlString, 'completed');
         }
     }
 
     console.log('Unprocessed URLs:', unprocessedUrls.length, unprocessedUrls);
 
     if (unprocessedUrls.length > 0) {
-        const nextUrl = unprocessedUrls[0];
+        const nextUrlData = unprocessedUrls[0];
+        const nextUrl = typeof nextUrlData === 'string' ? nextUrlData : nextUrlData.url;
         
-        console.log('Processing next URL:', nextUrl);
+        console.log('Processing next URL:', nextUrlData);
         updateRowStatus(nextUrl, 'processing');
         
         AppState.isProcessing = true;
@@ -464,6 +468,7 @@ async function processNextUrl() {
         chrome.runtime.sendMessage({
             type: 'process_url',
             url: nextUrl,
+            urlData: nextUrlData,
             state: getSerializableState()
         });
         
@@ -473,9 +478,8 @@ async function processNextUrl() {
         AppState.isProcessing = false;
         AppState.currentUrl = null;
         chrome.runtime.sendMessage({ type: 'processing_complete' });
-        processButton.disabled = true;  // Disable the process button when all URLs are processed
+        processButton.disabled = true;
         
-        // If we have processed data, enable the download button
         if (AppState.processedData.size > 0 || await StorageManager.getStoredPlaces().length > 0) {
             downloadCsvButton.disabled = false;
         }

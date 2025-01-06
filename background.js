@@ -191,6 +191,9 @@ function generateRequestId() {
 // Tab management
 async function updateTab(url) {
     try {
+        // Ensure we have a string URL
+        const urlString = typeof url === 'string' ? url : url.url;
+        
         const tabs = await chrome.tabs.query({});
         let targetTab = tabs.find(tab => 
             tab.url?.includes('google.com/maps') && 
@@ -208,7 +211,7 @@ async function updateTab(url) {
         if (targetTab) {
             try {
                 await chrome.tabs.update(targetTab.id, { 
-                    url: url,
+                    url: urlString,
                     active: true 
                 });
                 
@@ -221,7 +224,7 @@ async function updateTab(url) {
             } catch (error) {
                 console.error('Error updating existing tab:', error);
                 if (!error.message.includes('No tab with id')) {
-                    const newTab = await chrome.tabs.create({ url: url, active: true });
+                    const newTab = await chrome.tabs.create({ url: urlString, active: true });
                     // Same delays for new tab
                     await new Promise(resolve => setTimeout(resolve, 3000));
                     await new Promise(resolve => setTimeout(resolve, 5000));
@@ -230,7 +233,7 @@ async function updateTab(url) {
                 return false;
             }
         } else {
-            const newTab = await chrome.tabs.create({ url: url, active: true });
+            const newTab = await chrome.tabs.create({ url: urlString, active: true });
             // Same delays for new tab creation
             await new Promise(resolve => setTimeout(resolve, 3000));
             await new Promise(resolve => setTimeout(resolve, 5000));
@@ -314,7 +317,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 break;
 
             case 'process_url':
-                console.log('Processing URL request:', message.url);
+                console.log('Processing URL request:', message.urlData || message.url);
                 
                 if (BackgroundState.isProcessingLocked) {
                     console.log('Found locked state, forcing reset');
