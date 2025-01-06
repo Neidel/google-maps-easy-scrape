@@ -246,15 +246,24 @@
     }
     .bottom-controls {
       display: flex;
-      justify-content: flex-end;
-      gap: 10px;
+      justify-content: space-between;
       align-items: center;
       width: 100%;
     }
-    .process-controls {
+    .left-bottom-controls, .right-bottom-controls {
       display: flex;
-      gap: 10px;
       align-items: center;
+      gap: 10px;
+    }
+    .processing-cap-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .processing-cap-label {
+      font-size: 12px;
+      color: #666;
+      white-space: nowrap;
     }
     thead {
       position: sticky;
@@ -445,9 +454,6 @@
           <i class="fas fa-play"></i>
         </button>
       </div>
-      <div class="collection-cap">
-        <input type="number" id="collectionCap" class="input-small" placeholder="Collection Cap" min="1" value="100" title="Maximum number of unique entries to collect">
-      </div>
     </div>
     <div class="right-controls">
       <button id="clearMemoryButton" class="button button-danger" title="Clear All Known Records">
@@ -485,9 +491,17 @@
 
   <div class="bottom-bar">
     <div class="bottom-controls">
-      <button id="downloadCsvButton" class="icon-button" disabled title="Download CSV">
-        <i class="fas fa-download"></i>
-      </button>
+      <div class="left-bottom-controls">
+        <div class="processing-cap-group">
+          <input type="number" id="collectionCap" class="input-small" min="1" value="100" title="Maximum number of unique entries to collect">
+          <span class="processing-cap-label">Processing Cap</span>
+        </div>
+      </div>
+      <div class="right-bottom-controls">
+        <button id="downloadCsvButton" class="icon-button" disabled title="Download CSV">
+          <i class="fas fa-download"></i>
+        </button>
+      </div>
     </div>
     <div id="scanProgress" class="status-bar">Ready to scan</div>
   </div>
