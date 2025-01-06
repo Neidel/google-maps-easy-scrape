@@ -148,16 +148,14 @@ export const Logger = {
 // Grid Scanning Functions
 async function startGridScan() {
     console.log('Starting grid scan');
+    resetGridScanState(); // Reset only grid scan state
+    
     AppState.gridScanState.isScanning = true;
     AppState.gridScanState.currentRegionIndex = 0;
     const firstRegion = SCAN_REGIONS[0];
     AppState.gridScanState.currentLat = firstRegion.minLat;
     AppState.gridScanState.currentLon = firstRegion.minLon;
     AppState.gridScanState.currentRegion = firstRegion.name;
-    AppState.gridScanState.urlsCollected = 0;
-    AppState.gridScanState.uniqueUrlsCollected = 0;
-    AppState.gridScanState.processedLocations.clear();
-    AppState.gridScanState.uniqueUrls.clear();
     
     // Get collection cap from input
     const collectionCapInput = document.getElementById('collectionCap');
@@ -324,8 +322,7 @@ async function collectAndProcessLocation() {
 
 function handleGridScanComplete() {
     console.log('Grid scan complete');
-    AppState.gridScanState.isScanning = false;
-    AppState.gridScanState.currentRegion = null;
+    resetGridScanState();
     
     // Enable processing button if we have URLs
     if (AppState.collectedUrls.length > 0) {
@@ -377,17 +374,9 @@ async function resetState() {
         clearStallTimeout();
         
         // Reset grid scan state
-        AppState.gridScanState.isScanning = false;
-        AppState.gridScanState.currentLat = null;
-        AppState.gridScanState.currentLon = null;
-        AppState.gridScanState.currentRegionIndex = 0;
-        AppState.gridScanState.currentRegion = null;
-        AppState.gridScanState.urlsCollected = 0;
-        AppState.gridScanState.uniqueUrlsCollected = 0;
-        AppState.gridScanState.processedLocations.clear();
-        AppState.gridScanState.uniqueUrls.clear();
+        resetGridScanState();
         
-        // Clear storage
+        // Clear storage - only for full resets
         await clearAllStorage();
         
         const progressElement = document.getElementById('scanProgress');
@@ -1402,6 +1391,19 @@ async function checkForUnprocessedUrls() {
         }
     }
     return false;
+}
+
+// Add new function for grid scan state reset
+function resetGridScanState() {
+    AppState.gridScanState.isScanning = false;
+    AppState.gridScanState.currentLat = null;
+    AppState.gridScanState.currentLon = null;
+    AppState.gridScanState.currentRegionIndex = 0;
+    AppState.gridScanState.currentRegion = null;
+    AppState.gridScanState.urlsCollected = 0;
+    AppState.gridScanState.uniqueUrlsCollected = 0;
+    AppState.gridScanState.processedLocations.clear();
+    AppState.gridScanState.uniqueUrls.clear();
 }
 
 // ... rest of existing code ...
