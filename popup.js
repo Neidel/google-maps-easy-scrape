@@ -280,9 +280,18 @@ async function collectAndProcessLocation() {
 
         const urls = await collectUrlsFromPage();
         if (urls && urls.length > 0) {
+            const collectionCap = parseInt(document.getElementById('collectionCap').value) || 100;
+            const remainingNeeded = collectionCap - AppState.gridScanState.uniqueUrlsCollected;
+            
             // Filter out duplicates and already processed URLs
             const newUrls = [];
             for (const url of urls) {
+                // Stop if we've reached the cap
+                if (newUrls.length >= remainingNeeded) {
+                    console.log(`Reached collection cap of ${collectionCap}, stopping URL collection`);
+                    break;
+                }
+                
                 const urlString = typeof url === 'string' ? url : url.url;
                 if (!AppState.gridScanState.uniqueUrls.has(urlString) && !(await isUrlProcessed(urlString))) {
                     newUrls.push(url);
@@ -298,7 +307,6 @@ async function collectAndProcessLocation() {
             updateScanProgress();
 
             // Check if we've hit the collection cap
-            const collectionCap = parseInt(document.getElementById('collectionCap').value) || 100;
             if (AppState.gridScanState.uniqueUrlsCollected >= collectionCap) {
                 console.log(`Collection cap of ${collectionCap} reached. Completing scan.`);
                 handleGridScanComplete();
