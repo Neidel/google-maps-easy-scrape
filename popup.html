@@ -7,9 +7,12 @@
   <style>
     body { 
       min-width: 640px;
-      padding: 20px; 
+      padding: 20px;
+      padding-bottom: 60px;
       font-family: 'Poppins', sans-serif; 
       margin: 0;
+      position: relative;
+      min-height: 400px;
     }
     #message {
       font-size: 16px;
@@ -198,6 +201,7 @@
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
       overflow-x: auto;
       overflow-y: auto;
+      margin-bottom: 60px;
     }
     .url-link {
       color: #007BFF;
@@ -318,10 +322,7 @@
       flex: 1;
     }
     .scan-progress {
-      display: inline-block;
-      margin-left: 15px;
-      font-size: 12px;
-      color: #666;
+      display: none;
     }
     .delete-row-btn {
       border: none;
@@ -366,6 +367,36 @@
       outline: none;
       border-color: #007BFF;
     }
+
+    .bottom-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.9), rgba(255,255,255,1));
+      backdrop-filter: blur(8px);
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid #eee;
+      z-index: 1000;
+    }
+
+    .status-bar {
+      flex-grow: 1;
+      margin-left: 20px;
+      padding: 8px 12px;
+      background-color: #f8f9fa;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #666;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 600px;
+      border: 1px solid #eee;
+    }
   </style>  
 </head>
 <body>
@@ -385,7 +416,6 @@
       <div class="collection-cap">
         <input type="number" id="collectionCap" class="input-small" placeholder="Collection Cap" min="1" value="100" title="Maximum number of unique entries to collect">
       </div>
-      <div id="scanProgress" class="scan-progress">Ready to scan</div>
     </div>
     <div class="right-controls">
       <button id="clearButton" class="button" disabled title="Clear List">
@@ -424,13 +454,16 @@
     </table>
   </div>
 
-  <div class="bottom-controls">
-    <button id="processButton" class="icon-button" disabled title="Process URLs">
-      <i class="fas fa-play"></i>
-    </button>
-    <button id="downloadCsvButton" class="icon-button" disabled title="Download CSV">
-      <i class="fas fa-download"></i>
-    </button>
+  <div class="bottom-bar">
+    <div class="bottom-controls">
+      <button id="processButton" class="icon-button" disabled title="Process URLs">
+        <i class="fas fa-play"></i>
+      </button>
+      <button id="downloadCsvButton" class="icon-button" disabled title="Download CSV">
+        <i class="fas fa-download"></i>
+      </button>
+    </div>
+    <div id="scanProgress" class="status-bar">Ready to scan</div>
   </div>
 
   <div id="settingsModal" class="modal">
