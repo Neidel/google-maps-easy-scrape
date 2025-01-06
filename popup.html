@@ -347,6 +347,25 @@
       align-items: center;
       justify-content: space-between;
     }
+    .collection-cap {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 10px;
+    }
+    
+    .input-small {
+      width: 80px;
+      padding: 4px 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: 'Poppins', sans-serif;
+    }
+    
+    .input-small:focus {
+      outline: none;
+      border-color: #007BFF;
+    }
   </style>  
 </head>
 <body>
@@ -363,6 +382,9 @@
       <button id="collectButton" class="button" disabled title="Collect URLs">
         <i class="fas fa-search"></i>
       </button>
+      <div class="collection-cap">
+        <input type="number" id="collectionCap" class="input-small" placeholder="Collection Cap" min="1" value="100" title="Maximum number of unique entries to collect">
+      </div>
       <div id="scanProgress" class="scan-progress">Ready to scan</div>
     </div>
     <div class="right-controls">

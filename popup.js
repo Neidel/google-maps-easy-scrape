@@ -86,9 +86,11 @@ const AppState = {
         lonStep: 6.28,
         latStep: 5.0,
         urlsCollected: 0,
+        uniqueUrlsCollected: 0,
         processedLocations: new Set(),
         uniqueUrls: new Set(),
-        currentRegion: null
+        currentRegion: null,
+        collectionCap: 100
     }
 };
 
@@ -153,8 +155,13 @@ async function startGridScan() {
     AppState.gridScanState.currentLon = firstRegion.minLon;
     AppState.gridScanState.currentRegion = firstRegion.name;
     AppState.gridScanState.urlsCollected = 0;
+    AppState.gridScanState.uniqueUrlsCollected = 0;
     AppState.gridScanState.processedLocations.clear();
     AppState.gridScanState.uniqueUrls.clear();
+    
+    // Get collection cap from input
+    const collectionCapInput = document.getElementById('collectionCap');
+    AppState.gridScanState.collectionCap = parseInt(collectionCapInput.value) || 100;
     
     updateScanProgress();
     await navigateAndCollect();
@@ -273,15 +280,30 @@ async function collectAndProcessLocation() {
 
         const urls = await collectUrlsFromPage();
         if (urls && urls.length > 0) {
-            // Filter out duplicates
-            const newUrls = urls.filter(url => !AppState.gridScanState.uniqueUrls.has(url));
-            newUrls.forEach(url => AppState.gridScanState.uniqueUrls.add(url));
+            // Filter out duplicates and already processed URLs
+            const newUrls = [];
+            for (const url of urls) {
+                const urlString = typeof url === 'string' ? url : url.url;
+                if (!AppState.gridScanState.uniqueUrls.has(urlString) && !(await isUrlProcessed(urlString))) {
+                    newUrls.push(url);
+                    AppState.gridScanState.uniqueUrls.add(urlString);
+                }
+            }
             
-            AppState.gridScanState.urlsCollected += newUrls.length;
+            AppState.gridScanState.urlsCollected += urls.length;
+            AppState.gridScanState.uniqueUrlsCollected += newUrls.length;
             AppState.collectedUrls.push(...newUrls);
             
             updateTable(AppState.collectedUrls);
             updateScanProgress();
+
+            // Check if we've hit the collection cap
+            const collectionCap = parseInt(document.getElementById('collectionCap').value) || 100;
+            if (AppState.gridScanState.uniqueUrlsCollected >= collectionCap) {
+                console.log(`Collection cap of ${collectionCap} reached. Completing scan.`);
+                handleGridScanComplete();
+                return;
+            }
         }
 
         AppState.gridScanState.processedLocations.add(locationKey);
@@ -313,17 +335,17 @@ function updateScanProgress(message) {
     if (AppState.gridScanState.isScanning) {
         const region = SCAN_REGIONS[AppState.gridScanState.currentRegionIndex];
         const position = `${AppState.gridScanState.currentLat.toFixed(4)}, ${AppState.gridScanState.currentLon.toFixed(4)}`;
-        const progress = `Scanning ${region.name} | Position: ${position} | URLs: ${AppState.gridScanState.urlsCollected}`;
+        const collectionCap = parseInt(document.getElementById('collectionCap').value) || 100;
+        const progress = `Scanning ${region.name} | Position: ${position} | Unique URLs: ${AppState.gridScanState.uniqueUrlsCollected}/${collectionCap} | Total Scanned: ${AppState.gridScanState.urlsCollected}`;
         progressElement.textContent = progress;
         console.log('Grid scan progress:', progress);
     } else if (AppState.isProcessing) {
-        // Show processing status even when not scanning
         const displayMessage = message || 'Processing...';
         progressElement.textContent = displayMessage;
         console.log('Processing status:', displayMessage);
     } else {
         const displayMessage = AppState.gridScanState.urlsCollected > 0 ? 
-            `Scan complete. Total URLs: ${AppState.gridScanState.urlsCollected}` : 
+            `Scan complete. Unique URLs: ${AppState.gridScanState.uniqueUrlsCollected} | Total Scanned: ${AppState.gridScanState.urlsCollected}` : 
             message || 'Ready to scan';
         progressElement.textContent = displayMessage;
         console.log('Status update:', displayMessage);
@@ -353,6 +375,7 @@ async function resetState() {
         AppState.gridScanState.currentRegionIndex = 0;
         AppState.gridScanState.currentRegion = null;
         AppState.gridScanState.urlsCollected = 0;
+        AppState.gridScanState.uniqueUrlsCollected = 0;
         AppState.gridScanState.processedLocations.clear();
         AppState.gridScanState.uniqueUrls.clear();
         
