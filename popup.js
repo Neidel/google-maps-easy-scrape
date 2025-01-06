@@ -326,11 +326,12 @@ function handleGridScanComplete() {
     
     // Start processing if we have URLs
     if (AppState.collectedUrls.length > 0) {
-        clearButton.disabled = false;
         processNextUrl();
     } else {
-        startScanButton.disabled = false;
-        document.getElementById('scanMode').disabled = false;
+        const startScanButton = document.getElementById('startScanButton');
+        const scanModeSelect = document.getElementById('scanMode');
+        if (startScanButton) startScanButton.disabled = false;
+        if (scanModeSelect) scanModeSelect.disabled = false;
     }
     
     updateScanProgress();
@@ -362,7 +363,7 @@ function updateScanProgress(message) {
 
 // UI Elements
 let resultsTable;
-let collectButton, processButton, clearButton, downloadCsvButton;
+let downloadCsvButton;
 
 // State management functions
 async function resetState() {
@@ -1339,9 +1340,6 @@ function updateRowStatus(url, status, message = '') {
                 const urlToRemove = row.dataset.url;
                 AppState.collectedUrls = AppState.collectedUrls.filter(u => u !== urlToRemove);
                 row.remove();
-                if (AppState.collectedUrls.length === 0) {
-                    clearButton.disabled = true;
-                }
                 Logger.info('Removed URL from list:', urlToRemove);
             });
         }
