@@ -449,7 +449,7 @@ function incrementRetryCount(url) {
     return currentRetries + 1;
 }
 
-// Update processNextUrl to use storage
+// Update processNextUrl to manage button state
 async function processNextUrl() {
     if (AppState.isProcessing) {
         console.log('Already processing a URL, skipping');
@@ -461,7 +461,6 @@ async function processNextUrl() {
     // Filter out processed URLs and those that have exceeded retry limits
     const unprocessedUrls = [];
     for (const urlData of AppState.collectedUrls) {
-        // Extract the actual URL string from the object if necessary
         const urlString = typeof urlData === 'string' ? urlData : urlData.url;
         
         const processed = await isUrlProcessed(urlString);
@@ -488,6 +487,10 @@ async function processNextUrl() {
         AppState.isProcessing = true;
         AppState.currentUrl = nextUrl;
         
+        // Keep start button disabled during processing
+        const startScanButton = document.getElementById('startScanButton');
+        if (startScanButton) startScanButton.disabled = true;
+        
         chrome.runtime.sendMessage({
             type: 'process_url',
             url: nextUrl,
@@ -501,7 +504,12 @@ async function processNextUrl() {
         AppState.isProcessing = false;
         AppState.currentUrl = null;
         chrome.runtime.sendMessage({ type: 'processing_complete' });
-        processButton.disabled = true;
+        
+        // Re-enable start button only when all processing is complete
+        const startScanButton = document.getElementById('startScanButton');
+        const scanModeSelect = document.getElementById('scanMode');
+        if (startScanButton) startScanButton.disabled = false;
+        if (scanModeSelect) scanModeSelect.disabled = false;
         
         if (AppState.processedData.size > 0 || await StorageManager.getStoredPlaces().length > 0) {
             downloadCsvButton.disabled = false;
@@ -509,7 +517,7 @@ async function processNextUrl() {
     }
 }
 
-// Update handleXhrCaptured to use new state management
+// Update handleXhrCaptured to maintain button state
 async function handleXhrCaptured(message) {
     const data = message.data;
     console.log('Received XHR data:', data);
@@ -517,6 +525,11 @@ async function handleXhrCaptured(message) {
     if (data && data.placeId) {
         console.log('Processing data for place ID:', data.placeId);
         AppState.isProcessing = true;
+        
+        // Ensure start button stays disabled during processing
+        const startScanButton = document.getElementById('startScanButton');
+        if (startScanButton) startScanButton.disabled = true;
+        
         updateScanProgress(`Processing: ${data.name || 'Location'}`);
         
         if (message.currentState) {
@@ -610,13 +623,21 @@ async function handleXhrCaptured(message) {
             updateRowStatus(AppState.currentUrl, 'error', errorMessage);
             updateScanProgress(`Error: ${errorMessage}`);
             AppState.isProcessing = false;
+            
+            // Keep start button disabled if we still have URLs to process
+            const startScanButton = document.getElementById('startScanButton');
+            if (startScanButton && AppState.collectedUrls.length > 0) {
+                startScanButton.disabled = true;
+            }
         }
     }
 }
 
-// Update message listener to use new state management
+// Update message listener to maintain button state
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('Received message in popup:', message);
+    
+    const startScanButton = document.getElementById('startScanButton');
     
     switch (message.type) {
         case 'xhr_captured':
@@ -629,6 +650,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             updateRowStatus(message.url, 'error', `Auth failed (Attempt ${retryCount}/${AppState.MAX_RETRIES})`);
             AppState.isProcessing = false;
             AppState.currentUrl = null;
+            
+            // Keep start button disabled if we still have URLs to process
+            if (startScanButton && AppState.collectedUrls.length > 0) {
+                startScanButton.disabled = true;
+            }
             
             setTimeout(() => {
                 if (!AppState.isProcessing) {
@@ -645,6 +671,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (message.url) {
                 const retryCount = incrementRetryCount(message.url);
                 updateRowStatus(message.url, 'error', `Retrying... (Attempt ${retryCount}/${AppState.MAX_RETRIES})`);
+            }
+            
+            // Keep start button disabled if we still have URLs to process
+            if (startScanButton && AppState.collectedUrls.length > 0) {
+                startScanButton.disabled = true;
             }
             
             setTimeout(() => {
