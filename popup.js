@@ -693,7 +693,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     resultsTable = document.getElementById('resultsTable');
     const startScanButton = document.getElementById('startScanButton');
     const scanModeSelect = document.getElementById('scanMode');
-    clearButton = document.getElementById('clearButton');
     downloadCsvButton = document.getElementById('downloadCsvButton');
     const clearMemoryButton = document.getElementById('clearMemoryButton');
 
@@ -719,7 +718,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     startScanButton.addEventListener('click', async () => {
         try {
             startScanButton.disabled = true;
-            clearButton.disabled = true;
             scanModeSelect.disabled = true;
             
             const scanMode = scanModeSelect.value;
@@ -740,22 +738,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error('Error during scan:', error);
             alert('Error during scan. Please try again.');
         } finally {
-            startScanButton.disabled = false;
-            scanModeSelect.disabled = false;
-            if (AppState.collectedUrls.length > 0) {
-                clearButton.disabled = false;
-            }
-        }
-    });
-
-    clearButton.addEventListener('click', async () => {
-        if (confirm('Are you sure you want to clear all data? This cannot be undone.')) {
-            await clearAllStorage();
-            resetState();
-            clearTable();
-            chrome.runtime.sendMessage({ type: 'clear_captured_data' });
-            clearButton.disabled = true;
-            downloadCsvButton.disabled = true;
             startScanButton.disabled = false;
             scanModeSelect.disabled = false;
         }
