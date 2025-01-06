@@ -239,10 +239,11 @@
       font-size: 14px;
     }
     .bottom-controls {
-      margin-top: 10px;
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
+      gap: 10px;
       align-items: center;
+      width: 100%;
     }
     .process-controls {
       display: flex;
@@ -377,15 +378,14 @@
       backdrop-filter: blur(8px);
       padding: 10px 20px;
       display: flex;
-      justify-content: space-between;
-      align-items: center;
+      flex-direction: column;
+      gap: 10px;
       border-top: 1px solid #eee;
       z-index: 1000;
     }
 
     .status-bar {
-      flex-grow: 1;
-      margin-left: 20px;
+      width: 100%;
       padding: 8px 12px;
       background-color: #f8f9fa;
       border-radius: 4px;
@@ -394,8 +394,31 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 600px;
       border: 1px solid #eee;
+      box-sizing: border-box;
+      margin: 0;
+    }
+
+    .scan-mode-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .select-input {
+      padding: 6px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: 'Poppins', sans-serif;
+      background-color: white;
+      min-width: 160px;
+      cursor: pointer;
+    }
+
+    .select-input:focus {
+      outline: none;
+      border-color: #007BFF;
     }
   </style>  
 </head>
@@ -407,12 +430,15 @@
   
   <div class="main-controls">
     <div class="left-controls">
-      <button id="gridScanButton" class="button" title="Start Grid Scan">
-        <i class="fas fa-th"></i>
-      </button>
-      <button id="collectButton" class="button" disabled title="Collect URLs">
-        <i class="fas fa-search"></i>
-      </button>
+      <div class="scan-mode-group">
+        <select id="scanMode" class="select-input">
+          <option value="single">Single Page Scan</option>
+          <option value="grid">Grid Scan (Canada)</option>
+        </select>
+        <button id="startScanButton" class="button" title="Start Scan">
+          <i class="fas fa-play"></i>
+        </button>
+      </div>
       <div class="collection-cap">
         <input type="number" id="collectionCap" class="input-small" placeholder="Collection Cap" min="1" value="100" title="Maximum number of unique entries to collect">
       </div>
@@ -456,9 +482,6 @@
 
   <div class="bottom-bar">
     <div class="bottom-controls">
-      <button id="processButton" class="icon-button" disabled title="Process URLs">
-        <i class="fas fa-play"></i>
-      </button>
       <button id="downloadCsvButton" class="icon-button" disabled title="Download CSV">
         <i class="fas fa-download"></i>
       </button>

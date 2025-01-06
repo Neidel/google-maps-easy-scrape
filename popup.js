@@ -324,10 +324,13 @@ function handleGridScanComplete() {
     console.log('Grid scan complete');
     resetGridScanState();
     
-    // Enable processing button if we have URLs
+    // Start processing if we have URLs
     if (AppState.collectedUrls.length > 0) {
-        processButton.disabled = false;
         clearButton.disabled = false;
+        processNextUrl();
+    } else {
+        startScanButton.disabled = false;
+        document.getElementById('scanMode').disabled = false;
     }
     
     updateScanProgress();
@@ -657,11 +660,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 document.addEventListener('DOMContentLoaded', async () => {
     // Initialize UI elements
     resultsTable = document.getElementById('resultsTable');
-    collectButton = document.getElementById('collectButton');
-    processButton = document.getElementById('processButton');
+    const startScanButton = document.getElementById('startScanButton');
+    const scanModeSelect = document.getElementById('scanMode');
     clearButton = document.getElementById('clearButton');
     downloadCsvButton = document.getElementById('downloadCsvButton');
-    const gridScanButton = document.getElementById('gridScanButton');
+    const clearMemoryButton = document.getElementById('clearMemoryButton');
 
     // Initialize table headers
     initializeTableHeaders();
@@ -678,77 +681,40 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
         });
-        downloadCsvButton.disabled = false;  // Enable download if we have stored data
+        downloadCsvButton.disabled = false;
     }
 
-    // Enable buttons
-    collectButton.disabled = false;
-    gridScanButton.disabled = false;
-
     // Add event listeners
-    gridScanButton.addEventListener('click', async () => {
+    startScanButton.addEventListener('click', async () => {
         try {
-            gridScanButton.disabled = true;
-            collectButton.disabled = true;
+            startScanButton.disabled = true;
             clearButton.disabled = true;
-            processButton.disabled = true;
+            scanModeSelect.disabled = true;
             
-            // Clear existing data before starting new scan
-            resetState();
-            clearTable();
+            const scanMode = scanModeSelect.value;
             
-            await startGridScan();
-        } catch (error) {
-            Logger.error('Error starting grid scan:', error);
-        } finally {
-            // Re-enable buttons if scan is not in progress
-            if (!AppState.gridScanState.isScanning) {
-                gridScanButton.disabled = false;
-                collectButton.disabled = false;
-            }
-        }
-    });
-
-    collectButton.addEventListener('click', async () => {
-        try {
-            collectButton.disabled = true;
-            
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            
-            if (!tab?.id) {
-                alert('Error: Could not find active tab');
-                collectButton.disabled = false;
-                return;
-            }
-
-            const entries = await collectUrlsFromPage();
-            if (entries && entries.length > 0) {
-                AppState.collectedUrls = entries.map(entry => entry.url);
-                updateTable(entries);
-                processButton.disabled = false;
-                clearButton.disabled = false;
+            if (scanMode === 'grid') {
+                await startGridScan();
             } else {
-                alert('No new URLs found. All visible locations have already been processed.');
-                collectButton.disabled = false;
+                const urls = await collectUrlsFromPage();
+                if (urls && urls.length > 0) {
+                    AppState.collectedUrls = urls;
+                    updateTable(urls);
+                    await processNextUrl();
+                } else {
+                    alert('No new URLs found on this page.');
+                }
             }
         } catch (error) {
-            console.error('Error collecting URLs:', error);
-            alert('Error collecting URLs. Please try again.');
-            collectButton.disabled = false;
+            console.error('Error during scan:', error);
+            alert('Error during scan. Please try again.');
+        } finally {
+            startScanButton.disabled = false;
+            scanModeSelect.disabled = false;
+            if (AppState.collectedUrls.length > 0) {
+                clearButton.disabled = false;
+            }
         }
-    });
-
-    processButton.addEventListener('click', async () => {
-        const hasUnprocessedUrls = await checkForUnprocessedUrls();
-        if (!hasUnprocessedUrls) {
-            console.log('No unprocessed URLs found');
-            processButton.disabled = true;
-            alert('No URLs available for processing. Please collect URLs first.');
-            return;
-        }
-        
-        processButton.disabled = true;
-        processNextUrl();
     });
 
     clearButton.addEventListener('click', async () => {
@@ -757,25 +723,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             resetState();
             clearTable();
             chrome.runtime.sendMessage({ type: 'clear_captured_data' });
-            processButton.disabled = true;
             clearButton.disabled = true;
-            downloadCsvButton.disabled = true;  // Disable download when clearing all data
-            collectButton.disabled = false;
-            gridScanButton.disabled = false;
+            downloadCsvButton.disabled = true;
+            startScanButton.disabled = false;
+            scanModeSelect.disabled = false;
         }
     });
 
-    downloadCsvButton.addEventListener('click', async () => {
-        const storedPlaces = await getStoredPlacesForExport();
-        if (storedPlaces.length === 0) {
-            alert('No data available for export. Please collect and process some locations first.');
-            return;
-        }
-        downloadCsv();
-    });
-
-    const clearMemoryButton = document.getElementById('clearMemoryButton');
-    
     clearMemoryButton.addEventListener('click', async () => {
         if (confirm('Are you sure you want to clear all stored data from memory? This will remove all previously collected data but keep the current list.')) {
             await clearAllStorage();
@@ -793,14 +747,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             });
             
-            // Enable process button if there are URLs in the list
-            if (AppState.collectedUrls.length > 0) {
-                processButton.disabled = false;
-            }
-            
-            // Disable download button since memory is cleared
             downloadCsvButton.disabled = true;
         }
+    });
+
+    downloadCsvButton.addEventListener('click', async () => {
+        const storedPlaces = await getStoredPlacesForExport();
+        if (storedPlaces.length === 0) {
+            alert('No data available for export. Please collect and process some locations first.');
+            return;
+        }
+        downloadCsv();
     });
 });
 
@@ -1407,3 +1364,4 @@ function resetGridScanState() {
 }
 
 // ... rest of existing code ...
+
