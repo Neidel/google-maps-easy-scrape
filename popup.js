@@ -349,7 +349,7 @@ async function resetState() {
     AppState.gridScanState.uniqueUrls.clear();
     
     // Clear storage
-    StorageManager.clearStorage();
+    await clearAllStorage();
     
     const progressElement = document.getElementById('scanProgress');
     if (progressElement) {
