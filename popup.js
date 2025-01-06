@@ -1327,7 +1327,44 @@ function updateRowStatus(url, status, message = '') {
     const statusCell = row.querySelector('.status-col');
     if (!statusCell) return;
 
-    statusCell.textContent = message || status;
+    // Clear existing content
+    statusCell.innerHTML = '';
+    
+    // Add spinner for processing status
+    if (status === 'processing') {
+        statusCell.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>${message || 'Processing'}</span>
+            </div>
+        `;
+    } else {
+        // For other statuses, just show the message/status
+        statusCell.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span>${message || status}</span>
+                <button class="delete-row-btn" title="Remove from list">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        
+        // Re-add click handler for delete button
+        const deleteBtn = statusCell.querySelector('.delete-row-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const urlToRemove = row.dataset.url;
+                AppState.collectedUrls = AppState.collectedUrls.filter(u => u !== urlToRemove);
+                row.remove();
+                if (AppState.collectedUrls.length === 0) {
+                    clearButton.disabled = true;
+                }
+                Logger.info('Removed URL from list:', urlToRemove);
+            });
+        }
+    }
+
     statusCell.className = `status-col ${status}`;
 }
 
