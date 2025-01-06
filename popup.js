@@ -187,11 +187,13 @@ async function navigateAndCollect() {
 
     const currentUrl = generateMapUrl();
     console.log('Navigating to:', currentUrl);
+    updateScanProgress('Navigating to new location...');
     
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab?.id) {
             console.error('No active tab found');
+            updateScanProgress('Error: No active tab found');
             return;
         }
 
@@ -199,6 +201,7 @@ async function navigateAndCollect() {
         
         // Wait for initial page load
         await new Promise(resolve => setTimeout(resolve, 3000));
+        updateScanProgress('Waiting for page to load...');
         
         // Execute scrolling script
         await chrome.scripting.executeScript({
@@ -208,10 +211,12 @@ async function navigateAndCollect() {
         
         // Wait for scrolling to complete and content to load
         await new Promise(resolve => setTimeout(resolve, 2000));
+        updateScanProgress('Collecting data from page...');
         
         await collectAndProcessLocation();
     } catch (error) {
         console.error('Navigation error:', error);
+        updateScanProgress('Error during navigation');
         moveToNextGridPosition();
     }
 }
@@ -308,19 +313,21 @@ function updateScanProgress(message) {
     if (AppState.gridScanState.isScanning) {
         const region = SCAN_REGIONS[AppState.gridScanState.currentRegionIndex];
         const position = `${AppState.gridScanState.currentLat.toFixed(4)}, ${AppState.gridScanState.currentLon.toFixed(4)}`;
-        const progress = `${region.name} | ${position} | URLs: ${AppState.gridScanState.urlsCollected}`;
+        const progress = `Scanning ${region.name} | Position: ${position} | URLs: ${AppState.gridScanState.urlsCollected}`;
         progressElement.textContent = progress;
+        console.log('Grid scan progress:', progress);
     } else if (AppState.isProcessing) {
         // Show processing status even when not scanning
-        progressElement.textContent = message;
+        const displayMessage = message || 'Processing...';
+        progressElement.textContent = displayMessage;
+        console.log('Processing status:', displayMessage);
     } else {
-        progressElement.textContent = AppState.gridScanState.urlsCollected > 0 ? 
+        const displayMessage = AppState.gridScanState.urlsCollected > 0 ? 
             `Scan complete. Total URLs: ${AppState.gridScanState.urlsCollected}` : 
             message || 'Ready to scan';
+        progressElement.textContent = displayMessage;
+        console.log('Status update:', displayMessage);
     }
-    
-    // Log the update for debugging
-    console.log('Updating scan progress:', message);
 }
 
 // UI Elements
@@ -329,31 +336,36 @@ let collectButton, processButton, clearButton, downloadCsvButton;
 
 // State management functions
 async function resetState() {
-    AppState.collectedUrls = [];
-    AppState.processedData.clear();
-    AppState.urlToPlaceId.clear();
-    AppState.isProcessing = false;
-    AppState.currentUrl = null;
-    AppState.processingHistory.clear();
-    AppState.retryCount.clear();
-    clearStallTimeout();
-    
-    // Reset grid scan state
-    AppState.gridScanState.isScanning = false;
-    AppState.gridScanState.currentLat = null;
-    AppState.gridScanState.currentLon = null;
-    AppState.gridScanState.currentRegionIndex = 0;
-    AppState.gridScanState.currentRegion = null;
-    AppState.gridScanState.urlsCollected = 0;
-    AppState.gridScanState.processedLocations.clear();
-    AppState.gridScanState.uniqueUrls.clear();
-    
-    // Clear storage
-    await clearAllStorage();
-    
-    const progressElement = document.getElementById('scanProgress');
-    if (progressElement) {
-        progressElement.textContent = 'Ready to scan';
+    try {
+        AppState.collectedUrls = [];
+        AppState.processedData.clear();
+        AppState.urlToPlaceId.clear();
+        AppState.isProcessing = false;
+        AppState.currentUrl = null;
+        AppState.processingHistory.clear();
+        AppState.retryCount.clear();
+        clearStallTimeout();
+        
+        // Reset grid scan state
+        AppState.gridScanState.isScanning = false;
+        AppState.gridScanState.currentLat = null;
+        AppState.gridScanState.currentLon = null;
+        AppState.gridScanState.currentRegionIndex = 0;
+        AppState.gridScanState.currentRegion = null;
+        AppState.gridScanState.urlsCollected = 0;
+        AppState.gridScanState.processedLocations.clear();
+        AppState.gridScanState.uniqueUrls.clear();
+        
+        // Clear storage
+        await clearAllStorage();
+        
+        const progressElement = document.getElementById('scanProgress');
+        if (progressElement) {
+            progressElement.textContent = 'Ready to scan';
+        }
+    } catch (error) {
+        console.error('Error resetting state:', error);
+        updateScanProgress('Error resetting state');
     }
 }
 
@@ -477,7 +489,7 @@ async function handleXhrCaptured(message) {
     
     if (data && data.placeId) {
         console.log('Processing data for place ID:', data.placeId);
-        AppState.isProcessing = true;  // Set processing state to true
+        AppState.isProcessing = true;
         updateScanProgress(`Processing: ${data.name || 'Location'}`);
         
         if (message.currentState) {
@@ -554,7 +566,7 @@ async function handleXhrCaptured(message) {
                 }
             }
 
-            AppState.isProcessing = false;  // Set processing state to false when done
+            AppState.isProcessing = false;
             AppState.currentUrl = null;
 
             setTimeout(() => {
@@ -564,13 +576,13 @@ async function handleXhrCaptured(message) {
             }, 2000);
         }
     } else {
-        console.warn('Received XHR data without place ID');
+        console.warn('Received XHR data without place ID', data);
         if (AppState.currentUrl) {
             const retryCount = incrementRetryCount(AppState.currentUrl);
             const errorMessage = `No place ID found (Attempt ${retryCount}/${AppState.MAX_RETRIES})`;
             updateRowStatus(AppState.currentUrl, 'error', errorMessage);
             updateScanProgress(`Error: ${errorMessage}`);
-            AppState.isProcessing = false;  // Set processing state to false on error
+            AppState.isProcessing = false;
         }
     }
 }
